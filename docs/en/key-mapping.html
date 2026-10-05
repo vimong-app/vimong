@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Key Mappings — Vimong</title>
+  <meta name="description" content="The full Vim key mapping reference for Vimong: navigation, zoom, files, search, markdown, tabs.">
+  <link rel="canonical" href="https://vimong.app/en/key-mapping.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/key-mapping.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/key-mapping.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/key-mapping.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Key Mappings — Vimong">
+  <meta property="og:description" content="The full Vim key mapping reference for Vimong: navigation, zoom, files, search, markdown, tabs.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/en/key-mapping.html">
+  <link rel="icon" href="../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="index.html" class="hover:text-white">Home</a>
+        <a href="key-mapping.html" class="text-white">Key Mappings</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="../ko/key-mapping.html" class="text-neutral-500 hover:text-white">KO</a>
+          <a href="key-mapping.html" class="text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto flex max-w-5xl flex-col gap-10 px-6 py-16 lg:flex-row">
+    <aside class="lg:w-40 lg:shrink-0">
+      <nav class="flex gap-4 overflow-x-auto pb-2 text-sm text-neutral-400 lg:sticky lg:top-24 lg:flex-col lg:gap-2 lg:overflow-visible lg:pb-0">
+        <a href="#nav" class="hover:text-white">Navigation</a>
+        <a href="#zoom" class="hover:text-white">Zoom</a>
+        <a href="#file" class="hover:text-white">File</a>
+        <a href="#search" class="hover:text-white">Search</a>
+        <a href="#markdown" class="hover:text-white">Markdown</a>
+        <a href="#tabs" class="hover:text-white">Tabs</a>
+      </nav>
+    </aside>
+    <div class="max-w-3xl flex-1">
+    <h1 class="text-3xl font-bold text-white">Key Mappings</h1>
+    <p class="mt-2 text-neutral-400">The complete set of key mappings available in Vimong.</p>
+
+    <section id="nav" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Navigation</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">j</span> / <span class="kbd">k</span></td><td class="py-3 text-neutral-400">Scroll down / up</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">h</span> / <span class="kbd">l</span></td><td class="py-3 text-neutral-400">Scroll left / right</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Ctrl</span>+<span class="kbd">D</span> / <span class="kbd">Ctrl</span>+<span class="kbd">U</span></td><td class="py-3 text-neutral-400">Scroll half page down/up</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">J</span> / <span class="kbd">K</span></td><td class="py-3 text-neutral-400">Next / previous page</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">gg</span></td><td class="py-3 text-neutral-400">First page</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">ga</span></td><td class="py-3 text-neutral-400">Show ASCII/Unicode value of clicked character</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">G</span></td><td class="py-3 text-neutral-400">Last page</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">nG</span></td><td class="py-3 text-neutral-400">Go to page n (e.g. <span class="kbd">5G</span>)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">m{a-z}</span></td><td class="py-3 text-neutral-400">Save current position as a mark</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">'{a-z}</span> / <span class="kbd">`{a-z}</span></td><td class="py-3 text-neutral-400">Jump to a saved mark</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">f</span></td><td class="py-3 text-neutral-400">Show link hints, then jump</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">[</span> / <span class="kbd">]</span></td><td class="py-3 text-neutral-400">Switch sidebar tab (thumbnails/TOC/search)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Tab</span></td><td class="py-3 text-neutral-400">Toggle focus: sidebar ↔ document</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">j</span> / <span class="kbd">k</span> (when sidebar focused)</td><td class="py-3 text-neutral-400">Move between thumbnails/TOC/search result items</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">←</span> / <span class="kbd">→</span> or <span class="kbd">h</span> / <span class="kbd">l</span> (when TOC focused)</td><td class="py-3 text-neutral-400">Collapse/expand chapter, move to parent/child</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">Shift</span>+<span class="kbd">T</span></td><td class="py-3 text-neutral-400">Show/hide sidebar</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">r</span> / <span class="kbd">R</span></td><td class="py-3 text-neutral-400">Rotate the page 90° clockwise / counterclockwise (works for both PDF and HWP)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">p</span></td><td class="py-3 text-neutral-400">Presentation mode (enter full screen and fit one page to the screen like a slideshow)</td></tr>        </tbody>
+      </table>
+    </section>
+
+    <section id="zoom" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Zoom</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">zi</span></td><td class="py-3 text-neutral-400">Zoom in</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">zo</span></td><td class="py-3 text-neutral-400">Zoom out</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">z0</span></td><td class="py-3 text-neutral-400">100% size</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">zh</span></td><td class="py-3 text-neutral-400">Fit width</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">zv</span> / <span class="kbd">zz</span></td><td class="py-3 text-neutral-400">Fit height</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">+</span></td><td class="py-3 text-neutral-400">Zoom in</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">-</span></td><td class="py-3 text-neutral-400">Zoom out</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="file" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">File</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">:e</span></td><td class="py-3 text-neutral-400">Open file (dialog)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:e {path}</span></td><td class="py-3 text-neutral-400">Open file by path (Cmd+V to paste)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:q</span> / <span class="kbd">Cmd</span>+<span class="kbd">W</span></td><td class="py-3 text-neutral-400">Close current tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:?</span></td><td class="py-3 text-neutral-400">Open shortcuts help</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:cmd</span></td><td class="py-3 text-neutral-400">Open commands help</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:oss</span></td><td class="py-3 text-neutral-400">Open open-source licenses</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">I</span></td><td class="py-3 text-neutral-400">Document info</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:attachments</span> / <span class="kbd">:att</span></td><td class="py-3 text-neutral-400">Show attachment list (sidebar)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:print</span> / <span class="kbd">Cmd</span>+<span class="kbd">P</span></td><td class="py-3 text-neutral-400">Print</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:export [-m] [-p] [pagespec] &lt;path&gt;</span> / <span class="kbd">Cmd</span>+<span class="kbd">Shift</span>+<span class="kbd">E</span></td><td class="py-3 text-neutral-400">Export as image (PNG/JPG) or PDF. Without pagespec, uses selected pages, or the current page (whole document for PDF). -p sets a password (PDF only)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:images</span></td><td class="py-3 text-neutral-400">Save images embedded in the current page to a folder, byte-for-byte</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:view {mode}</span></td><td class="py-3 text-neutral-400">Switch view mode — single/1, single-continuous/1c, two/2, two-continuous/2c, horizontal-continuous/h</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">dd</span> (start screen)</td><td class="py-3 text-neutral-400">Remove the selected recent file from the list</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="search" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Search</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">/</span> / <span class="kbd">Cmd</span>+<span class="kbd">F</span></td><td class="py-3 text-neutral-400">Search (Korean/Japanese/Chinese supported)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">n</span> / <span class="kbd">N</span></td><td class="py-3 text-neutral-400">Next / previous match</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:nohlsearch</span> / <span class="kbd">:noh</span></td><td class="py-3 text-neutral-400">Clear search highlighting (re-enabled by next search/n/N)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">...\c</span> / <span class="kbd">...\C</span></td><td class="py-3 text-neutral-400">Append to search term to ignore/match case (overrides the Aa toggle)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">...\r</span> / <span class="kbd">...\R</span></td><td class="py-3 text-neutral-400">Append to search term to force regex on/off (overrides the .* toggle)</td></tr>        </tbody>
+      </table>
+      <h3 class="mt-8 text-sm font-semibold text-neutral-300">Supported regex syntax (vim magic mode)</h3>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">.</span> <span class="kbd">*</span> <span class="kbd">^</span> <span class="kbd">$</span></td><td class="py-3 text-neutral-400">Any character / zero or more / line start / line end</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">[...]</span> <span class="kbd">[^...]</span></td><td class="py-3 text-neutral-400">Character class / negated character class</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\+</span> <span class="kbd">\?</span> <span class="kbd">\=</span></td><td class="py-3 text-neutral-400">One or more / zero or one</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\{n,m}</span> <span class="kbd">\{-...}</span></td><td class="py-3 text-neutral-400">Specify repeat count (prefix with - for lazy matching)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\(</span> <span class="kbd">\)</span> <span class="kbd">\|</span></td><td class="py-3 text-neutral-400">Group / OR</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\&lt;</span> <span class="kbd">\&gt;</span></td><td class="py-3 text-neutral-400">Word boundary (start / end of word)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\zs</span> <span class="kbd">\ze</span></td><td class="py-3 text-neutral-400">Set start / end of the match (highlight) range</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\d</span> <span class="kbd">\D</span> <span class="kbd">\w</span> <span class="kbd">\W</span> <span class="kbd">\s</span> <span class="kbd">\S</span></td><td class="py-3 text-neutral-400">Digit / non-digit / word char / non-word char / whitespace / non-whitespace</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\a</span> <span class="kbd">\l</span> <span class="kbd">\u</span> <span class="kbd">\x</span> <span class="kbd">\o</span> <span class="kbd">\h</span></td><td class="py-3 text-neutral-400">Letter / lowercase / uppercase / hex digit / octal digit / identifier char (uppercase = negated)</td></tr>
+        </tbody>
+      </table>
+      <p class="mt-4 text-xs text-neutral-500">Unsupported: lookaround (<span class="kbd">\@=</span> <span class="kbd">\@!</span> <span class="kbd">\@&lt;=</span> <span class="kbd">\@&lt;!</span>), backreferences (<span class="kbd">\1</span>–<span class="kbd">\9</span>), <span class="kbd">\%(...\)</span></p>
+    </section>
+
+    <section id="markdown" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Markdown</h2>
+      <p class="mt-2 text-sm text-neutral-400">Only active when a <span class="kbd">.md</span> document is open. See the <a href="features/markdown.html" class="text-emerald-300 hover:underline">Markdown support</a> page for details.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">gc</span> / <span class="kbd">gp</span> / <span class="kbd">gs</span></td><td class="py-3 text-neutral-400">Switch to code / preview / split view</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:md code</span> / <span class="kbd">:md preview</span> / <span class="kbd">:md split</span></td><td class="py-3 text-neutral-400">Same thing as a command (<span class="kbd">:md c</span>/<span class="kbd">p</span>/<span class="kbd">s</span> also work)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:md theme [name]</span></td><td class="py-3 text-neutral-400">Switch preview theme (no name cycles to the next one)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section id="tabs" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Tabs</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">T</span></td><td class="py-3 text-neutral-400">New tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:tabnew</span></td><td class="py-3 text-neutral-400">New tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:tabnew {path}</span> / <span class="kbd">:tabe {path}</span></td><td class="py-3 text-neutral-400">Open file in a new tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:tabclose</span></td><td class="py-3 text-neutral-400">Close current tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:tabonly</span> / <span class="kbd">:tabo</span></td><td class="py-3 text-neutral-400">Close all other tabs, keep only the current one</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">gt</span> / <span class="kbd">gT</span></td><td class="py-3 text-neutral-400">Next / previous tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Cmd</span>+<span class="kbd">Shift</span>+<span class="kbd">]</span> / <span class="kbd">Cmd</span>+<span class="kbd">Shift</span>+<span class="kbd">[</span></td><td class="py-3 text-neutral-400">Next / previous tab</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">ngt</span></td><td class="py-3 text-neutral-400">Go to tab n (e.g. <span class="kbd">2gt</span>)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:tabmove [N]</span></td><td class="py-3 text-neutral-400">Move tab position (no arg = last, 0 = first, +N/-N = relative)</td></tr>
+        </tbody>
+      </table>
+    </section>
+    </div>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+
+</body>
+</html>

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Font usage breakdown — Vimong</title>
+  <meta name="description" content="See which fonts are embedded in a document and how much of the text actually uses each one, right from the document info panel.">
+  <link rel="canonical" href="https://vimong.app/en/features/font-analysis.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/font-analysis.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/font-analysis.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/font-analysis.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Font usage breakdown — Vimong">
+  <meta property="og:description" content="See which fonts are embedded in a document and how much of the text actually uses each one, right from the document info panel.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/en/features/font-analysis.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">Home</a>
+        <a href="../key-mapping.html" class="hover:text-white">Key Mappings</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="../../ko/features/font-analysis.html" class="text-neutral-500 hover:text-white">KO</a>
+          <a href="font-analysis.html" class="text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← All features</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">Font usage breakdown</h1>
+    <p class="mt-3 text-neutral-400">Press <span class="kbd">Cmd+I</span> to open document info and switch to the Fonts tab to see every font embedded in the document and how many characters each one actually renders.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Usage analysis</h2>
+      <p class="mt-3 text-neutral-400">The font list alone doesn't tell you how heavily each one is used. Clicking "Analyze usage" scans the whole document and computes each font's share of the total character count. Large documents take a moment, so progress is shown and you can stop the scan any time.</p>
+      <img src="../../assets/font-usage-sample.png" alt="Font usage analysis result screen — list of fonts with character counts and share" class="mt-4 max-w-sm rounded-xl border border-white/10">
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

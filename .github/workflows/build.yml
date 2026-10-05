@@ -1,0 +1,84 @@
+name: Build
+
+# macOS/Linux/Windows 3개 플랫폼에서 Tauri 번들이 실제로 빌드되는지만 검증한다.
+# 서명·공증(배포용)은 여기서 하지 않는다 — macOS는 scripts/build-dmg.sh +
+# docs/macos-code-signing.qmd가 따로 맡고, Windows/Linux는 아직 서명 인증서가 없다.
+# 그래서 Apple 인증서 시크릿이 없으면(포크의 PR 등) ad-hoc 서명("-")으로 자동 폴백한다.
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['docs/**']
+  pull_request:
+    branches: [main]
+    paths-ignore: ['docs/**']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: ''
+          - platform: ubuntu-22.04
+            args: '--bundles deb,appimage'
+          - platform: windows-latest
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    # if: 조건식에서는 secrets 컨텍스트를 직접 못 쓴다("Unrecognized named-value: 'secrets'")
+    # — env로 한 번 거쳐서 step if에서는 이 env를 보고 분기한다.
+    env:
+      HAS_APPLE_CERT: ${{ secrets.APPLE_CERTIFICATE != '' }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf build-essential curl wget file libxdo-dev libssl-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # Apple 인증서 시크릿이 없을 때(기본값) — APPLE_CERTIFICATE 환경변수 자체를 안 넘긴다.
+      # 빈 문자열이라도 넘기면 Tauri가 "값이 있다"고 보고 키체인 import를 시도하다 실패한다
+      # (실제로 한 번 이렇게 깨졌었다) — 그래서 이 조건일 땐 아예 그 키를 안 쓰는 step으로 분리.
+      - uses: tauri-apps/tauri-action@v0
+        if: ${{ env.HAS_APPLE_CERT == 'false' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_SIGNING_IDENTITY: '-'
+        with:
+          args: ${{ matrix.args }}
+
+      # Apple 인증서 시크릿이 있을 때 — 실제 서명 아이덴티티로 서명·공증까지 진행.
+      - uses: tauri-apps/tauri-action@v0
+        if: ${{ env.HAS_APPLE_CERT == 'true' }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: 'Developer ID Application: Textment (TM5L299Z9N)'
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          args: ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vimong-${{ matrix.platform }}
+          path: src-tauri/target/release/bundle
+          if-no-files-found: ignore

@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Markdown Support — Vimong</title>
+  <meta name="description" content="Open .md files just like PDFs, in code, preview, or side-by-side split view. Switch anytime with gc/gp/gs or the :md command, with scroll kept in sync in split view.">
+  <link rel="canonical" href="https://vimong.app/en/features/markdown.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/markdown.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/markdown.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/markdown.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Markdown Support — Vimong">
+  <meta property="og:description" content="Open .md files just like PDFs, in code, preview, or side-by-side split view. Switch anytime with gc/gp/gs or the :md command, with scroll kept in sync in split view.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/en/features/markdown.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">Home</a>
+        <a href="../key-mapping.html" class="hover:text-white">Key Mappings</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="../../ko/features/markdown.html" class="text-neutral-500 hover:text-white">KO</a>
+          <a href="markdown.html" class="text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← All features</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">Markdown Support</h1>
+    <p class="mt-3 text-neutral-400">Vimong handles <span class="kbd">.md</span> files with the same vi keybindings it uses for PDFs. Switch between the raw source, a rendered preview, and a split view showing both side by side.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Switching views</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">gc</span> / <span class="kbd">gp</span> / <span class="kbd">gs</span></td><td class="py-3 text-neutral-400">Switch to code / preview / split view</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:md code</span> / <span class="kbd">:md preview</span> / <span class="kbd">:md split</span></td><td class="py-3 text-neutral-400">Same thing as a command (<span class="kbd">:md c</span>/<span class="kbd">p</span>/<span class="kbd">s</span> also work)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:md theme {name}</span></td><td class="py-3 text-neutral-400">Switch the preview color theme. No name cycles to the next one; <span class="kbd">Tab</span> autocompletes the name</td></tr>
+        </tbody>
+      </table>
+      <p class="mt-3 text-neutral-400">In split view, scrolling either pane keeps the other one pointed at the same spot in the document.</p>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Export pages — Vimong</title>
+  <meta name="description" content="Export pages as PNG, JPG, or PDF. Merge multiple pages into one file or split them into separate ones, and password-protect PDF exports.">
+  <link rel="canonical" href="https://vimong.app/en/features/export.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/export.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/export.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/export.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Export pages — Vimong">
+  <meta property="og:description" content="Export pages as PNG, JPG, or PDF. Merge multiple pages into one file or split them into separate ones, and password-protect PDF exports.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/en/features/export.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">Home</a>
+        <a href="../key-mapping.html" class="hover:text-white">Key Mappings</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="../../ko/features/export.html" class="text-neutral-500 hover:text-white">KO</a>
+          <a href="export.html" class="text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← All features</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">Export pages</h1>
+    <p class="mt-3 text-neutral-400">A table for a slide deck, a figure for a blog post — you don't need a separate screenshot tool to pull a whole page out as an image or PDF. File → Export, or the <span class="kbd">:export</span> command, handles it directly.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Formats</h2>
+      <p class="mt-3 text-neutral-400">PNG, JPG, and PDF are all supported. Multiple pages save as separate, numbered files by default; turn on "merge" and images get stitched into one tall image, or PDF pages get combined into a single file.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Picking pages</h2>
+      <p class="mt-3 text-neutral-400">There are three ways to choose which pages to export.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4">Type a page spec</td><td class="py-3 text-neutral-400">e.g. <span class="kbd">1-3,7-8,20-22</span></td></tr>
+          <tr><td class="py-3 pr-4">Multi-select thumbnails</td><td class="py-3 text-neutral-400">Cmd+click / Shift+click thumbnails in the sidebar and the export spec fills in automatically</td></tr>
+          <tr><td class="py-3 pr-4">Select a table-of-contents section</td><td class="py-3 text-neutral-400">Click a heading in the outline panel, then open Export — that section's page range (including subsections) fills in automatically</td></tr>
+        </tbody>
+      </table>
+      <div class="mt-6 flex flex-wrap items-end justify-center gap-6">
+        <figure>
+          <img src="../../assets/export-thumbnail-select.png" alt="Selecting pages in the sidebar thumbnails and exporting" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;Select pages via thumbnails, then export&gt;</figcaption>
+        </figure>
+        <figure>
+          <img src="../../assets/export-toc-select.png" alt="Selecting a table-of-contents section and exporting" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;Select a TOC section, then export&gt;</figcaption>
+        </figure>
+        <figure>
+          <img src="../../assets/export-dialog.png" alt="PDF export settings dialog" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;Exporting to PDF&gt;</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">PDF passwords</h2>
+      <p class="mt-3 text-neutral-400">Exporting to PDF can set a password at the same time. On the command line, add the <span class="kbd">-p</span> flag: <span class="kbd">:export -p [pagespec] &lt;path.pdf&gt;</span>.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Where it saves</h2>
+      <p class="mt-3 text-neutral-400">By default, exports land in the same folder as the source document. If a file with the same name already exists, Vimong asks before overwriting it.</p>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

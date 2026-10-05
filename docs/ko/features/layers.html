@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>레이어(옵셔널 콘텐츠) — Vimong</title>
+  <meta name="description" content="PDF의 옵셔널 콘텐츠 레이어(OCG)를 사이드바에서 켜고 끕니다. GIS·CAD 문서가 쓰는 중첩 레이어 그룹은 트리 구조로 들여쓰기되어 보입니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/layers.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/layers.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/layers.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/layers.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="레이어(옵셔널 콘텐츠) — Vimong">
+  <meta property="og:description" content="PDF의 옵셔널 콘텐츠 레이어(OCG)를 사이드바에서 켜고 끕니다. GIS·CAD 문서가 쓰는 중첩 레이어 그룹은 트리 구조로 들여쓰기되어 보입니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/layers.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="layers.html" class="text-white">KO</a>
+          <a href="../../en/features/layers.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">레이어(옵셔널 콘텐츠)</h1>
+    <p class="mt-3 text-neutral-400">PDF는 옵셔널 콘텐츠 그룹(OCG)을 담을 수 있습니다 — Acrobat에서 CAD 도면, GIS 내보내기, 다국어 문서를 열면 보이는 "레이어" 패널이 바로 그것입니다. Vimong도 똑같은 패널을 제공합니다: 레이어가 있는 문서를 열면 사이드바에 <span class="kbd">레이어</span> 탭이 자동으로 나타나고, 레이어마다 체크박스로 표시 여부를 바꿀 수 있습니다.</p>
+    <img src="../../assets/layers-sample.png" alt="중첩 트리를 보여주는 레이어 패널 — Map Frame 안에 Data Source Attribution과 Map이 있고, Map 안에 Light Gray Base가, 최상위에 Scale Bar와 North Arrow가 있음" class="mt-4 rounded-xl border border-white/10">
+    <p class="mt-2 text-xs text-neutral-500">샘플 파일: <a href="https://github.com/py-pdf/sample-files/tree/main/029-optional-content-groups" class="text-emerald-300 hover:underline">py-pdf/sample-files</a>의 <span class="kbd">ocg_map_test.pdf</span></p>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

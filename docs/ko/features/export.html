@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>페이지 내보내기 — Vimong</title>
+  <meta name="description" content="원하는 페이지를 PNG·JPG·PDF로 내보냅니다. 여러 페이지를 한 파일로 합치거나 페이지별로 나눠 저장하고, PDF는 암호도 설정할 수 있습니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/export.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/export.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/export.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/export.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="페이지 내보내기 — Vimong">
+  <meta property="og:description" content="원하는 페이지를 PNG·JPG·PDF로 내보냅니다. 여러 페이지를 한 파일로 합치거나 페이지별로 나눠 저장하고, PDF는 암호도 설정할 수 있습니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/export.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="export.html" class="text-white">KO</a>
+          <a href="../../en/features/export.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">페이지 내보내기</h1>
+    <p class="mt-3 text-neutral-400">발표 자료에 넣을 표 한 장, 블로그에 붙일 그림 한 장 — 페이지 전체를 이미지나 PDF로 뽑아내는 데 별도 캡처 도구가 필요 없습니다. 파일 메뉴의 "내보내기"나 <span class="kbd">:export</span> 명령으로 바로 처리합니다.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">포맷</h2>
+      <p class="mt-3 text-neutral-400">PNG, JPG, PDF 세 포맷을 지원합니다. 여러 페이지를 지정하면 기본적으로 페이지마다 별도 파일(번호가 붙음)로 저장되고, "합치기" 옵션을 켜면 이미지는 위아래로 이어붙인 한 장으로, PDF는 한 파일로 합쳐집니다.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">내보낼 페이지 고르기</h2>
+      <p class="mt-3 text-neutral-400">세 가지 방법으로 내보낼 페이지를 지정할 수 있습니다.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4">페이지 스펙 직접 입력</td><td class="py-3 text-neutral-400">예: <span class="kbd">1-3,7-8,20-22</span></td></tr>
+          <tr><td class="py-3 pr-4">썸네일 다중 선택</td><td class="py-3 text-neutral-400">사이드바 썸네일에서 Cmd+클릭/Shift+클릭으로 페이지를 고르면 내보내기 스펙에 자동으로 채워짐</td></tr>
+          <tr><td class="py-3 pr-4">목차에서 섹션 선택</td><td class="py-3 text-neutral-400">목차 패널에서 헤딩을 클릭한 뒤 내보내기를 열면 그 섹션(하위 항목 포함) 페이지 범위가 자동으로 채워짐</td></tr>
+        </tbody>
+      </table>
+      <div class="mt-6 flex flex-wrap items-end justify-center gap-6">
+        <figure>
+          <img src="../../assets/export-thumbnail-select.png" alt="사이드바 썸네일에서 페이지를 선택하고 내보내기 실행" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;썸네일에서 페이지 선택 후 내보내기&gt;</figcaption>
+        </figure>
+        <figure>
+          <img src="../../assets/export-toc-select.png" alt="목차에서 섹션을 선택하고 내보내기 실행" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;목차에서 섹션 선택 후 내보내기&gt;</figcaption>
+        </figure>
+        <figure>
+          <img src="../../assets/export-dialog.png" alt="PDF 내보내기 설정 창" class="mx-auto h-[440px] w-auto shrink-0 rounded-xl border border-white/10">
+          <figcaption class="mt-2 text-center text-neutral-400">&lt;PDF로 내보내기&gt;</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">PDF 암호</h2>
+      <p class="mt-3 text-neutral-400">PDF로 내보낼 때는 암호를 함께 설정할 수 있습니다. 명령줄에서는 <span class="kbd">:export -p [pagespec] &lt;path.pdf&gt;</span>처럼 <span class="kbd">-p</span> 옵션을 붙입니다.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">저장 위치</h2>
+      <p class="mt-3 text-neutral-400">기본적으로 원본 문서와 같은 폴더에 저장됩니다. 이미 같은 이름의 파일이 있으면 덮어쓰기 전에 확인합니다.</p>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

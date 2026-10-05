@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>하이퍼링크 힌트 — Vimong</title>
+  <meta name="description" content="f를 누르면 페이지 안 모든 링크에 힌트 라벨이 뜨고, 문자를 입력하면 마우스 없이 바로 이동합니다. Vimium 스타일의 링크 탐색입니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/link-hints.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/link-hints.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/link-hints.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/link-hints.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="하이퍼링크 힌트 — Vimong">
+  <meta property="og:description" content="f를 누르면 페이지 안 모든 링크에 힌트 라벨이 뜨고, 문자를 입력하면 마우스 없이 바로 이동합니다. Vimium 스타일의 링크 탐색입니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/link-hints.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="link-hints.html" class="text-white">KO</a>
+          <a href="../../en/features/link-hints.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">하이퍼링크 힌트</h1>
+    <p class="mt-3 text-neutral-400">vim의 <a href="https://github.com/easymotion/vim-easymotion" target="_blank" rel="noopener" class="text-emerald-300 hover:underline">easymotion</a> 플러그인처럼 페이지 안 링크마다 짧은 문자 힌트를 붙여줍니다.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">사용법</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">f</span></td><td class="py-3 text-neutral-400">현재 화면에 보이는 모든 링크에 힌트 라벨 표시</td></tr>
+          <tr><td class="py-3 pr-4">힌트 문자 입력</td><td class="py-3 text-neutral-400">해당 링크로 즉시 이동</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Esc</span></td><td class="py-3 text-neutral-400">힌트 모드 취소</td></tr>
+        </tbody>
+      </table>
+      <img src="../../assets/link-hints-sample.png" alt="f를 눌러 목차 링크마다 힌트 라벨이 표시된 화면" class="mt-4 rounded-xl border border-white/10">
+    </section>
+
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

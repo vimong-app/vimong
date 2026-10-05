@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://vimong.app/ko/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/key-mapping.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/key-mapping.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/key-mapping.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/key-mapping.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/key-mapping.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/key-mapping.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/vim-keybindings.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/vim-keybindings.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/vim-keybindings.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/vim-keybindings.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/vim-keybindings.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/vim-keybindings.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/regex-search.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/regex-search.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/regex-search.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/regex-search.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/regex-search.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/regex-search.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/link-hints.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/link-hints.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/link-hints.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/link-hints.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/link-hints.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/link-hints.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/rotation.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/rotation.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/rotation.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/rotation.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/rotation.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/rotation.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/export.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/export.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/export.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/export.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/export.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/export.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/font-analysis.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/font-analysis.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/font-analysis.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/font-analysis.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/font-analysis.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/font-analysis.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/zoom.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/zoom.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/zoom.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/zoom.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/zoom.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/zoom.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/synctex.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/synctex.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/synctex.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/synctex.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/synctex.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/synctex.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/hwp.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/hwp.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/hwp.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/hwp.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/hwp.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/hwp.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/highlight-notes.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/highlight-notes.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/highlight-notes.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/highlight-notes.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/highlight-notes.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/highlight-notes.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/markdown.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/markdown.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/markdown.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/markdown.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/markdown.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/markdown.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/ko/features/layers.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/layers.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/layers.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/layers.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/layers.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/layers.html" />
+  </url>
+</urlset>

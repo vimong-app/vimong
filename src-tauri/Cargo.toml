@@ -1,0 +1,77 @@
+[package]
+name = "vimong"
+version = "0.0.0" # 장식용 — 실제 앱 버전은 package.json이 단일 소스(tauri.conf.json 참고)
+description = "A Tauri App"
+authors = ["you"]
+edition = "2021"
+license = "AGPL-3.0-or-later"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "vimong_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["macos-private-api"] }
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+tauri-plugin-process = "2"
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-window-state = "2"
+tauri-plugin-single-instance = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# tesseract 기본 기능은 MuPDF 자체 내장 OCR인데 우리는 안 쓴다(오늘 추가한 macOS Vision OCR
+# 사용). 이 기능의 C++ 코드가 지금 Xcode SDK와 안 맞아 release 빌드가 깨져서, 기본 기능
+# 목록에서 tesseract만 빼고 나머지는 그대로 유지한다.
+# bundled-fonts(droid/noto/sil)는 일부러 추가했다 — base14는 라틴만 커버하고, 그 밖의
+# 문자(한글/CJK/데바나가리/암하라 등)는 system-fonts(font-kit/CoreText)로 폴백하는데, mupdf
+# 내부 폴백 테이블이 요구하는 폰트 이름이 Noto 계열 이름 기준이라 macOS에 실제 설치된
+# 폰트 이름(AppleSDGothicNeo 등)과 안 맞아 거의 항상 실패한다 — 실패한 CoreText 검색은
+# 캐시도 안 돼서 느리기까지 하다(다국어 EPUB에서 문서 하나 여는 데 분 단위). bundled-fonts를
+# 켜면 mupdf가 내부 폴백 테이블과 실제로 이름이 맞는 폰트 데이터를 앱에 직접 담아가서,
+# 시스템 폰트 검색 없이 로컬 조회만으로 대부분의 스크립트를 커버한다(더 정확하고 더 빠름).
+mupdf = { version = "0.8", default-features = false, features = [
+    "js", "xps", "svg", "cbz", "img", "html", "epub",
+    "system-fonts", "bundled-fonts", "brotli", "docx-output", "base14-fonts",
+] }
+base64 = "0.22"
+sys-locale = "0.3"
+regex = "1"
+# 내보내기(JPG)용 — mupdf 크레이트는 Pixmap을 JPEG로 인코딩하는 API를 노출하지 않는다.
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+# 마크다운 코드 폰트 설정에서 시스템에 실제 설치된 폰트 목록을 보여주려고 — 플랫폼별로
+# CoreText(macOS)/DirectWrite(Windows)/fontconfig(Linux)를 알아서 골라 쓴다.
+font-kit = "0.14"
+
+# 텍스트 레이어가 없는 스캔 이미지 PDF에서 Vision OCR로 텍스트 선택을 지원 — macOS 전용
+# (Windows/Linux는 나중에 별도 엔진으로)
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-foundation = { version = "0.3", features = ["NSArray", "NSData", "NSDictionary", "NSString", "NSGeometry", "NSValue"] }
+objc2-vision = { version = "0.3", features = ["VNRequest", "VNObservation", "VNRequestHandler", "VNRecognizeTextRequest", "VNTypes"] }
+objc2-core-foundation = "0.3"
+# 전체화면 전환 뒤 webview가 first responder를 못 되찾는 tao의 알려진 버그
+# (https://github.com/tauri-apps/tao/issues/208) 우회용 — makeFirstResponder를 직접 호출한다.
+objc2-app-kit = { version = "0.3", default-features = false, features = ["NSWindow", "NSResponder", "NSView"] }
+objc2-web-kit = { version = "0.3", default-features = false, features = ["WKWebView", "objc2-app-kit"] }
+
+# tauri dev(디버그 빌드)는 우리 코드(vimong_lib) 컴파일은 빨라야 하지만, mupdf-sys가 감싼
+# MuPDF C 라이브러리까지 디버그(-O0)로 빌드되면 EPUB relayout처럼 CPU 무거운 작업이
+# release 대비 8~10배 느려진다(직접 측정: 다국어 EPUB 한 권 page_count() 기준
+# release ~0.1초 vs debug ~0.6~2초) — zi/zo로 폰트 크기 바꿀 때마다 이 비용이 그대로
+# 들어가서 디버그 빌드에서는 테스트가 힘들 정도였다. mupdf-sys/mupdf만 최적화 켜서
+# 빌드하면 우리 코드 반복 빌드 속도는 그대로 두고 이 부분만 release급으로 빨라진다.
+[profile.dev.package.mupdf-sys]
+opt-level = 3
+
+[profile.dev.package.mupdf]
+opt-level = 3
+

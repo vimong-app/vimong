@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://vimong.app/sitemap.xml

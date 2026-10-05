@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Regex search — Vimong</title>
+  <meta name="description" content="Search documents with vim-style magic-mode regular expressions. \c/\C and \r/\R suffixes, plus full Korean/Japanese/Chinese text search.">
+  <link rel="canonical" href="https://vimong.app/en/features/regex-search.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/regex-search.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/regex-search.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/regex-search.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Regex search — Vimong">
+  <meta property="og:description" content="Search documents with vim-style magic-mode regular expressions. \c/\C and \r/\R suffixes, plus full Korean/Japanese/Chinese text search.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/en/features/regex-search.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">Home</a>
+        <a href="../key-mapping.html" class="hover:text-white">Key Mappings</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="../../ko/features/regex-search.html" class="text-neutral-500 hover:text-white">KO</a>
+          <a href="regex-search.html" class="text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← All features</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">Regex search</h1>
+    <p class="mt-3 text-neutral-400">Press <span class="kbd">/</span> to open search and find text using the same regex syntax as vim's magic mode. Korean, Japanese, and Chinese text search just as well as English.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Basics</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">/</span> / <span class="kbd">Cmd+F</span></td><td class="py-3 text-neutral-400">Open search</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">n</span> / <span class="kbd">N</span></td><td class="py-3 text-neutral-400">Next / previous match</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:nohlsearch</span> / <span class="kbd">:noh</span></td><td class="py-3 text-neutral-400">Turn off search highlighting (turns back on with the next search or n/N)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Suffixes on the query</h2>
+      <p class="mt-3 text-neutral-400">A suffix on the query always wins over the search bar's case/regex toggle buttons.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">...\c</span> / <span class="kbd">...\C</span></td><td class="py-3 text-neutral-400">Force case-insensitive / case-sensitive</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">...\r</span> / <span class="kbd">...\R</span></td><td class="py-3 text-neutral-400">Force regex / force plain text</td></tr>
+        </tbody>
+      </table>
+      <p class="mt-3 text-neutral-400 text-sm">Without a suffix, the query is always treated as plain text — the regex toggle just reflects what actually happened.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Supported regex syntax (vim magic mode)</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">.</span> <span class="kbd">*</span> <span class="kbd">^</span> <span class="kbd">$</span></td><td class="py-3 text-neutral-400">Any character / 0-or-more / line start / line end</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">[...]</span> <span class="kbd">[^...]</span></td><td class="py-3 text-neutral-400">Character class / negated character class</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\+</span> <span class="kbd">\?</span> <span class="kbd">\=</span></td><td class="py-3 text-neutral-400">1-or-more / 0-or-1</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\{n,m}</span> <span class="kbd">\{-...}</span></td><td class="py-3 text-neutral-400">Repeat count (leading - for a minimal match)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\(</span> <span class="kbd">\)</span> <span class="kbd">\|</span></td><td class="py-3 text-neutral-400">Group / OR</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\&lt;</span> <span class="kbd">\&gt;</span></td><td class="py-3 text-neutral-400">Word boundary (start / end)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\zs</span> <span class="kbd">\ze</span></td><td class="py-3 text-neutral-400">Set the start / end of the highlighted match</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\d</span> <span class="kbd">\D</span> <span class="kbd">\w</span> <span class="kbd">\W</span> <span class="kbd">\s</span> <span class="kbd">\S</span></td><td class="py-3 text-neutral-400">Digit / non-digit / word / non-word / whitespace / non-whitespace</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">\a</span> <span class="kbd">\l</span> <span class="kbd">\u</span> <span class="kbd">\x</span> <span class="kbd">\o</span> <span class="kbd">\h</span></td><td class="py-3 text-neutral-400">Alphabetic / lowercase / uppercase / hex digit / octal digit / identifier char (capital = negated)</td></tr>
+        </tbody>
+      </table>
+      <p class="mt-4 text-xs text-neutral-500">Not supported: lookaround (<span class="kbd">\@=</span> <span class="kbd">\@!</span> <span class="kbd">\@&lt;=</span> <span class="kbd">\@&lt;!</span>), backreferences (<span class="kbd">\1</span>–<span class="kbd">\9</span>), <span class="kbd">\%(...\)</span></p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">Good to know</h2>
+      <p class="mt-3 text-neutral-400">Some PDFs — usually old scans or documents produced by legacy toolchains — have text embedded in the file that doesn't actually match what's rendered on screen (a broken ToUnicode mapping). These documents render fine but can fail to search, and that's a defect in the file itself, not something any viewer can fix.</p>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

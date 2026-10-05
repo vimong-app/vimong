@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SyncTeX 지원 — Vimong</title>
+  <meta name="description" content="LaTeX 소스와 PDF 사이를 SyncTeX으로 정방향/역방향 이동합니다. VS Code, TeXShop과 연동됩니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/synctex.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/synctex.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/synctex.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/synctex.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="SyncTeX 지원 — Vimong">
+  <meta property="og:description" content="LaTeX 소스와 PDF 사이를 SyncTeX으로 정방향/역방향 이동합니다. VS Code, TeXShop과 연동됩니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/synctex.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="synctex.html" class="text-white">KO</a>
+          <a href="../../en/features/synctex.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">SyncTeX 지원</h1>
+    <p class="mt-3 text-neutral-400">LaTeX 문서를 쓰다 보면 "PDF의 이 문장이 소스 몇 번째 줄이지?", "지금 편집 중인 이 줄이 PDF 어디쯤 나오지?"를 계속 오가게 됩니다. SyncTeX 연동으로 편집기와 PDF 사이를 양방향으로 바로 이동할 수 있습니다.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">역방향 검색 (PDF → 소스)</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">Shift+Cmd+클릭</span> / <span class="kbd">Shift+Ctrl+클릭</span></td><td class="py-3 text-neutral-400">PDF에서 클릭한 위치에 대응하는 LaTeX 소스 줄로 편집기를 열어 바로 이동</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">정방향 검색 (소스 → PDF)</h2>
+      <p class="mt-3 text-neutral-400">편집기 쪽에서 SyncTeX 정방향 검색을 실행하면 Vimong이 해당 PDF 페이지의 정확한 위치로 이동합니다.</p>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">편집기 연동</h2>
+      <p class="mt-3 text-neutral-400">설정의 SyncTeX 탭에서 역방향 검색이 열 편집기 명령을 지정합니다. VS Code 프리셋을 바로 쓰거나, <span class="kbd">%f</span>(파일) <span class="kbd">%l</span>(줄) <span class="kbd">%c</span>(열) 자리표시자를 쓴 사용자 지정 명령을 입력할 수 있습니다.</p>
+      <p class="mt-3 text-neutral-400">TeXShop은 SyncTeX용 CLI가 따로 없어서 도우미 스크립트가 필요한데, 설정 화면에서 설치 명령을 복사해 터미널에 붙여넣기만 하면 됩니다.</p>
+    </section>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

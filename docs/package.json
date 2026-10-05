@@ -1,0 +1,13 @@
+{
+  "name": "vimong-website",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "build": "tailwindcss -i src/input.css -o css/style.css --minify",
+    "watch": "tailwindcss -i src/input.css -o css/style.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4",
+    "tailwindcss": "^4"
+  }
+}

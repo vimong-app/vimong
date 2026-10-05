@@ -1,0 +1,13 @@
+@import "tailwindcss";
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-feature-settings: "cv11";
+}
+
+.kbd {
+  @apply inline-block rounded-md border border-white/10 bg-white/5 px-2 py-0.5 font-mono text-sm text-emerald-300;
+}

@@ -1,0 +1,17 @@
+<!-- 언어별 정적 페이지(/ko/, /en/)로 보내는 루트 리다이렉트 -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Vimong</title>
+  <script>
+    location.replace(navigator.language.startsWith("ko") ? "ko/" : "en/");
+  </script>
+</head>
+<body>
+  <noscript>
+    <p><a href="ko/">한국어</a></p>
+    <p><a href="en/">English</a></p>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vim 키바인딩 지원 — Vimong</title>
+  <meta name="description" content="Vimong은 마우스 없이 키보드만으로 PDF를 읽도록 설계됐습니다. j/k/h/l 스크롤부터 gg/G, 마크, 프레젠테이션 모드까지 Vim 키바인딩을 그대로 씁니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/vim-keybindings.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/vim-keybindings.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/vim-keybindings.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/vim-keybindings.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Vim 키바인딩 지원 — Vimong">
+  <meta property="og:description" content="Vimong은 마우스 없이 키보드만으로 PDF를 읽도록 설계됐습니다. j/k/h/l 스크롤부터 gg/G, 마크, 프레젠테이션 모드까지 Vim 키바인딩을 그대로 씁니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/vim-keybindings.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="vim-keybindings.html" class="text-white">KO</a>
+          <a href="../../en/features/vim-keybindings.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">Vim 키바인딩 지원</h1>
+    <p class="mt-3 text-neutral-400">Vimong은 처음부터 "마우스 없이 문서를 읽는다"는 전제로 만들어졌습니다. 화면 전체에 걸린 단 하나의 keydown 리스너가 지금 상태(일반/명령/검색 모드)에 따라 키 입력을 해석하는, vim과 같은 모드 기반 구조입니다.</p>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">이동</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">j</span> / <span class="kbd">k</span></td><td class="py-3 text-neutral-400">아래 / 위 스크롤</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">h</span> / <span class="kbd">l</span></td><td class="py-3 text-neutral-400">좌 / 우 스크롤</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Ctrl+D</span> / <span class="kbd">Ctrl+U</span></td><td class="py-3 text-neutral-400">반 페이지 아래 / 위로 스크롤</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">J</span> / <span class="kbd">K</span></td><td class="py-3 text-neutral-400">다음 / 이전 페이지</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">gg</span> / <span class="kbd">G</span></td><td class="py-3 text-neutral-400">첫 페이지 / 마지막 페이지</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">nG</span></td><td class="py-3 text-neutral-400">n번째 페이지로 이동 (예: <span class="kbd">5G</span>)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">마크</h2>
+      <p class="mt-3 text-neutral-400">vim처럼 자주 돌아올 위치를 마크로 저장해두고 즉시 점프할 수 있습니다.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">m{a-z}</span></td><td class="py-3 text-neutral-400">현재 위치를 마크로 저장</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">'{a-z}</span> / <span class="kbd">`{a-z}</span></td><td class="py-3 text-neutral-400">저장한 마크로 이동</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="mt-10">
+      <h2 class="text-lg font-semibold text-white">그 밖의 모드</h2>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">ga</span></td><td class="py-3 text-neutral-400">클릭한 글자의 아스키/유니코드 값을 상태 표시줄에 보기</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">[</span> / <span class="kbd">]</span></td><td class="py-3 text-neutral-400">사이드바 탭 전환 (썸네일 / 목차 / 검색)</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Tab</span></td><td class="py-3 text-neutral-400">사이드바 ↔ 본문 포커스 전환</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">p</span></td><td class="py-3 text-neutral-400">프레젠테이션 모드 — 전체화면으로 전환하고 한 페이지를 화면에 꽉 채워 슬라이드처럼 보기</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:</span></td><td class="py-3 text-neutral-400">명령줄 모드 진입 (<span class="kbd">:e</span>, <span class="kbd">:w</span>, <span class="kbd">:export</span> 등)</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <p class="mt-10 text-sm text-neutral-500">전체 목록은 <a href="../key-mapping.html" class="text-emerald-300 hover:underline">키 매핑 페이지</a>에서 확인하세요. 앱 안에서는 <span class="kbd">:?</span> 명령이나 도움말 메뉴로 같은 표를 언제든 다시 볼 수 있습니다.</p>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>

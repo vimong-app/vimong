@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" href="%sveltekit.assets%/favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tauri + SvelteKit App</title>
+    %sveltekit.head%
+  </head>
+  <body data-sveltekit-preload-data="hover">
+    <script>
+      // 앱이 마운트되기 전에 body에 라이트 테마 클래스를 미리 적용해둔다 — $lib/theme.js의
+      // loadThemePref/detectSystemTheme과 완전히 같은 로직. 이걸 안 해두면 기본(다크) 배경으로
+      // 한 번 그려졌다가 Svelte가 마운트되고 나서야 $effect가 라이트로 바꾸는 깜빡임이 생긴다.
+      // Tauri가 이 인라인 스크립트를 자동으로 해시해서 CSP script-src에 넣어주므로
+      // 'unsafe-inline' 없이도 막히지 않는다.
+      try {
+        var pref = localStorage.getItem('vimong-theme') || 'auto';
+        var light = pref === 'light' || (pref === 'auto' && matchMedia('(prefers-color-scheme: light)').matches);
+        if (light) document.body.classList.add('theme-light');
+      } catch (e) {}
+    </script>
+    <div style="display: contents">%sveltekit.body%</div>
+  </body>
+</html>
