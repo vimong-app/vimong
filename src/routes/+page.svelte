@@ -2776,6 +2776,7 @@
   let pendingN = null;      // numeric prefix saved when setting pendingPrefix
   let zHeld = false;        // true while z key is physically held down — z를 쥔 채로 i/o를
                              // 반복해서 눌러도(PDF 뷰어 관례) 매번 z를 다시 안 눌러도 되게 한다
+  let zUsed = false;        // 이번 z 누름으로 z-명령을 이미 실행했는지 — keyup에서 프리픽스 정리 여부 판단
   let marks = {};           // m{a-z}로 저장한 위치 — { [letter]: { page, y } }, 탭별로 저장/복원
   let lastSearch = '';
   let searchResultIdx = $state(0);  // current index in flatSearchMatches()
@@ -4642,6 +4643,8 @@
 
     // ── z-prefix: zi / zo / z0 / zh / zv ──
     if (pendingPrefix === 'z') {
+      if (key === 'z' && e.repeat) return; // z를 쥐고 있을 때의 자동 반복은 zz로 치지 않는다
+      zUsed = true;
       // z를 쥔 채로 있으면(zHeld) pendingPrefix를 'z'로 유지해서 i/o를 여러 번 다시 눌러도
       // 매번 z를 새로 안 눌러도 되게 한다(PDF 뷰어 관례) — 그런데 z를 뗀 뒤에도 이걸 안
       // 지워두면, 한참 뒤에 완전히 새로 누르는 z(다음 zi/zo 시도의 첫 키)가 "zz(높이 맞춤)"의
@@ -4808,6 +4811,7 @@
       pendingN = n; pendingPrefix = 'g';
     } else if (key === 'z') {
       zHeld = true;
+      zUsed = false;
       pendingPrefix = 'z';
     } else if (key === 'm') {
       pendingPrefix = 'm';
@@ -5538,9 +5542,10 @@
 <svelte:window
   onkeydown={handleKeydown}
   onkeyup={(e) => {
-    // z를 떼는 순간 "z-prefix 세션"을 확실히 끝낸다 — 안 그러면 다음에 완전히 새로 누르는
-    // z가 이전 세션이 남긴 pendingPrefix='z' 때문에 zz(높이 맞춤)의 두 번째 z로 오인된다.
-    if (e.key === 'z') { zHeld = false; if (pendingPrefix === 'z') pendingPrefix = ''; }
+    // z를 쥔 채 zi/zo를 실행했다면 떼는 순간 "z-prefix 세션"을 끝낸다 — 안 그러면 다음에 새로
+    // 누르는 z가 zz(높이 맞춤)의 두 번째 z로 오인된다. 아직 아무 명령도 안 했다면(z를 눌렀다
+    // 떼고 h/v/0/z를 누르는 일반적인 입력) 프리픽스를 유지해야 zh/zv/z0/zz가 동작한다.
+    if (e.key === 'z') { zHeld = false; if (zUsed && pendingPrefix === 'z') pendingPrefix = ''; }
   }}
   onmousemove={(e) => { onSidebarResizeMove(e); onSelectionDragMove(e); }}
   onmouseup={(e) => { stopSidebarResize(); stopSelectionDrag(e); }}
