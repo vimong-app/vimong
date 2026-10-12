@@ -42,6 +42,16 @@ conventions Vim users already know.
 
 See full descriptions on the [website](https://vimong.app/en/).
 
+## Install
+
+macOS (Apple Silicon) via [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask vimong-app/tap/vimong
+```
+
+Or download the `.dmg` from [Releases](https://github.com/vimong-app/vimong/releases/latest).
+
 ## Supported formats
 
 Beyond PDF, Vimong supports every format MuPDF opens natively: **PDF · HWP · XPS · EPUB · CBZ · SVG · DOCX · XLSX · PPTX**, plus PNG/JPG/GIF/BMP/TIFF images.

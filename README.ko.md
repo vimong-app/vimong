@@ -41,6 +41,16 @@ Vimong은 화면을 마우스로 스크롤하는 대신 `j`/`k`/`gg`/`G` 같은 
 
 각 기능의 상세 설명은 [웹사이트](https://vimong.app/ko/)에서 확인할 수 있습니다.
 
+## 설치
+
+macOS (Apple Silicon) — [Homebrew](https://brew.sh)로 설치:
+
+```bash
+brew install --cask vimong-app/tap/vimong
+```
+
+또는 [Releases](https://github.com/vimong-app/vimong/releases/latest)에서 `.dmg`를 내려받으세요.
+
 ## 지원 포맷
 
 PDF 외에도 MuPDF가 네이티브로 여는 포맷을 함께 지원합니다: **PDF · HWP · XPS · EPUB · CBZ · SVG · DOCX · XLSX · PPTX** 및 PNG/JPG/GIF/BMP/TIFF 이미지.
