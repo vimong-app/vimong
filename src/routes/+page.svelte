@@ -3694,11 +3694,11 @@
   // ── 자동 리로드 ── 열린 파일이 밖에서 바뀌면(LaTeX 재컴파일 등) 같은 위치·배율로 다시 연다.
   // ponytail: get_file_mtime(초 단위) 1초 폴링, 현재 탭만 — 컴파일 도중 반쯤 쓴 파일을 피하려고
   // 바뀐 mtime이 두 번 연속 같을 때만 연다. 더 빨라야 하면 Rust notify 크레이트로 바꿀 것.
-  // hwp/마크다운은 위치 복원 경로가 달라 일단 제외.
+  // hwp는 위치 복원 경로가 달라 일단 제외. 마크다운은 reloadMarkdown이 본문만 갈아 끼운다.
   let seenMtime = 0;
   let reloading = false;
   async function checkFileChanged() {
-    if (!filePath || !currentFileMtime || hwpMode || mdMode || reloading || mode !== 'normal') return;
+    if (!filePath || !currentFileMtime || hwpMode || reloading || mode !== 'normal') return;
     const path = filePath;
     const m = await invoke('get_file_mtime', { path }).catch(() => 0);
     if (path !== filePath || !m || m === currentFileMtime) { seenMtime = 0; return; }
@@ -3710,6 +3710,7 @@
       statusMsg = t('status.reload_skipped_dirty');
       return;
     }
+    if (mdMode) { await reloadMarkdown(path, m); return; }
     reloading = true;
     try {
       const pos = { page: currentPage, y: currentPageY() };
@@ -3723,6 +3724,27 @@
       await gotoPageAndY(Math.min(pos.page, pageCount - 1), pos.y);
       statusMsg = t('status.reloaded', { name: baseName(path) });
     } finally {
+      reloading = false;
+    }
+  }
+
+  // 마크다운은 openMarkdownFile로 다시 열지 않고 본문만 갈아 끼운다 — Markdown 컴포넌트와 스크롤
+  // 요소가 그대로 남아 있어서 스크롤 위치·보기 모드·배율이 따로 복원할 필요 없이 유지된다.
+  // 검색 결과는 문자 오프셋 기준이라 내용이 바뀌면 엉뚱한 곳을 가리키니 비운다.
+  /** @param {string} path @param {number} m */
+  async function reloadMarkdown(path, m) {
+    reloading = true;
+    try {
+      const bytes = new Uint8Array(await invoke('read_file_bytes', { path }));
+      if (path !== filePath) return; // 읽는 사이 다른 파일/탭으로 바뀜
+      mdSource = new TextDecoder('utf-8').decode(bytes);
+      toc = buildMdToc(mdSource);
+      mdSearchResults = [];
+      statusMsg = t('status.reloaded', { name: baseName(path) });
+    } catch (e) {
+      statusMsg = `Error: ${e}`;
+    } finally {
+      if (path === filePath) currentFileMtime = m; // 실패해도 같은 변경으로 매초 다시 시도하지 않게
       reloading = false;
     }
   }
