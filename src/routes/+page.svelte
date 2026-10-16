@@ -2519,10 +2519,13 @@
   let showCommands = $state(false);
   let showOpenSource = $state(false);
   let showAbout = $state(false);
+  let showMarks = $state(false);
+  /** @type {{letter: string, page: number, file: string}[]} */
+  let marksList = $state([]);
   // 정보성 모달(도움말류) — 탭 전환/생성/닫기 등 문서 상태를 바꾸는 동작과 부딪히면
   // 모달만 붕 뜬 채 남으니, 열려있는 동안은 그런 동작을 막는 데 같이 쓴다.
   function blockingHelpModalOpen() {
-    return showFileInfo || showShortcuts || showCommands || showOpenSource || showSettings || showAbout;
+    return showFileInfo || showShortcuts || showCommands || showOpenSource || showSettings || showAbout || showMarks;
   }
   let appVersion = $state('');
   let showQuitConfirm = $state(false);
@@ -2627,7 +2630,7 @@
   let cmdInput = $state('');
 
   // execCommand이 인식하는 명령어 이름 전체 — Tab 자동완성 후보 목록.
-  const COMMAND_NAMES = ['q', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att'];
+  const COMMAND_NAMES = ['q', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm'];
   const PATH_ARG_COMMANDS = ['e', 'w', 'export']; // 인자로 경로를 받는 명령 — 여기만 경로 자동완성 대상
   const MD_SUBCOMMANDS = ['code', 'preview', 'split', 'theme']; // :md 서브명령 Tab 자동완성 후보
   /** @type {{kind: string, candidates: string[], idx: number, prefix?: string} | null} */
@@ -3970,6 +3973,55 @@
     await gotoFilePos(m);
   }
 
+  // :marks — vim처럼 ' (직전 점프), a-z(이 파일), A-Z(파일 마크) 순으로 보여준다
+  function openMarksList() {
+    const rows = [];
+    const prev = prevJumpPos[filePath];
+    if (prev) rows.push({ letter: "'", page: prev.page + 1, file: '' });
+    for (const [letter, m] of Object.entries(marks).sort()) rows.push({ letter, page: m.page + 1, file: '' });
+    for (const [letter, m] of Object.entries(loadGlobalMarks()).sort()) {
+      rows.push({ letter, page: m.page + 1, file: m.path === filePath ? '' : baseName(m.path) });
+    }
+    marksList = rows;
+    showMarks = true;
+  }
+
+  // :delmarks {marks} — vim 문법: "a b", "a-d", "A", "'" 를 섞어 쓸 수 있다. :delmarks!는 이 파일의 a-z 전부
+  /** @param {string} arg @param {boolean} bang */
+  function deleteMarks(arg, bang) {
+    if (bang) {
+      marks = {};
+    } else {
+      const spec = arg.replace(/\s+/g, '');
+      if (!spec) { statusMsg = t('status.delmarks_usage'); return; }
+      /** @type {string[]} */
+      const letters = [];
+      for (let i = 0; i < spec.length; i++) {
+        const c = spec[i];
+        if (spec[i + 1] === '-' && i + 2 < spec.length) {
+          const end = spec[i + 2];
+          const sameCase = /[a-z]/.test(c) ? /[a-z]/.test(end) : /[A-Z]/.test(c) && /[A-Z]/.test(end);
+          if (!sameCase || end < c) { statusMsg = t('status.delmarks_invalid', { arg: spec.slice(i, i + 3) }); return; }
+          for (let k = c.charCodeAt(0); k <= end.charCodeAt(0); k++) letters.push(String.fromCharCode(k));
+          i += 2;
+        } else if (/[a-zA-Z']/.test(c)) {
+          letters.push(c);
+        } else {
+          statusMsg = t('status.delmarks_invalid', { arg: c }); return;
+        }
+      }
+      const global = loadGlobalMarks();
+      for (const c of letters) {
+        if (c === "'") delete prevJumpPos[filePath];
+        else if (/[a-z]/.test(c)) delete marks[c];
+        else delete global[c];
+      }
+      try { localStorage.setItem(GLOBAL_MARKS_KEY, JSON.stringify(global)); } catch (_) { /* skip */ }
+    }
+    if (filePath) saveMarks(filePath, marks);
+    statusMsg = t('status.marks_deleted');
+  }
+
   // 파일+위치로 이동 — 다른 파일이면 이미 열린 탭이 있을 때 newTab이 그 탭으로 전환만 하고,
   // 빈 탭이면 그 자리에 연다(정방향 검색과 같은 규칙). 파일 마크와 점프리스트가 공유한다.
   /** @param {{path: string, page: number, y: number}} m */
@@ -4441,7 +4493,7 @@
       // 설정 모달 위에 겹쳐 뜨는 팝업이라, 한 번 누르면 이것부터 닫히고 설정 모달은 남는다
       if (showTexshopHelp) { closeTexshopHelp(); return; }
       if (blockingHelpModalOpen()) {
-        showFileInfo = showShortcuts = showCommands = showOpenSource = showSettings = showAbout = false; resetModalNav(); return;
+        showFileInfo = showShortcuts = showCommands = showOpenSource = showSettings = showAbout = showMarks = false; resetModalNav(); return;
       } else if (showQuitConfirm) {
         showQuitConfirm = false; return;
       } else if (showTabOnlyConfirm) {
@@ -4553,6 +4605,7 @@
       return;
     }
     if (showOpenSource) return;
+    if (showMarks) return; // 닫기 버튼에 포커스가 있어 Enter/Space는 네이티브로 닫힌다
     if (showAbout) return; // Cmd+C로 버전 텍스트를 복사할 수 있어야 해서 아무 것도 가로채지 않는다
     if (showSettings) {
       // Enter/문자 입력 등은 모달 안 요소 자체 기본 동작에 맡긴다(SyncTeX 명령 입력창이 있어서
@@ -5654,6 +5707,12 @@
       await showSelectionFont();
     } else if (cmd === 'set' || cmd === 'settings') {
       openSettings();
+    } else if (cmd === 'marks') {
+      openMarksList();
+    } else if (cmd === 'delmarks!' || cmd === 'delm!') {
+      deleteMarks('', true);
+    } else if (/^delm(arks)?(\s|$)/.test(cmd)) {
+      deleteMarks(cmd.replace(/^delm(arks)?/, ''), false);
     } else if (cmd === 'set invert' || cmd === 'set noinvert' || cmd === 'set invert!') {
       if (cmd === 'set invert!') togglePageInvert();
       else { setInvertPref(cmd === 'set invert' ? 'on' : 'off'); statusMsg = t(invertPages ? 'status.page_invert_on' : 'status.page_invert_off'); }
@@ -6872,6 +6931,8 @@
               <tr><td>:w</td><td>{t('commands.file.write_inplace')}</td></tr>
               <tr><td>:w [-p] [pagespec] &lt;path&gt;</td><td>{t('commands.file.write')}</td></tr>
               <tr><td>:docinfo</td><td>{t('shortcuts.file.doc_info')}</td></tr>
+              <tr><td>:marks</td><td>{t('commands.marks')}</td></tr>
+              <tr><td>:delm[arks] a b-d A / :delm!</td><td>{t('commands.delmarks')}</td></tr>
               <tr><td>:attachments / :att</td><td>{t('commands.file.attachments')}</td></tr>
               <tr><td>:print</td><td>{t('shortcuts.file.print')}</td></tr>
               <tr><td>:export [-m] [-p] [pagespec] &lt;path&gt;</td><td>{t('shortcuts.file.export')}</td></tr>
@@ -6968,6 +7029,29 @@
       <p class="quit-desc">AGPL-3.0-or-later · © 2026 Textment</p>
       <div class="quit-actions">
         <button use:focusOnMount onclick={() => showAbout = false}>{t('modal.close')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if showMarks}
+  <div class="overlay" role="dialog" aria-modal="true"
+       onclick={() => showMarks = false}
+       onkeydown={(e) => e.key === 'Escape' && (showMarks = false)}>
+    <div class="modal quit-modal" onclick={(e) => e.stopPropagation()}>
+      <h2>{t('marks.title')}</h2>
+      {#if marksList.length === 0}
+        <p class="quit-desc">{t('marks.empty')}</p>
+      {:else}
+        <table class="marks-table"><tbody>
+          <tr><th>{t('marks.col_mark')}</th><th>{t('marks.col_page')}</th><th>{t('marks.col_file')}</th></tr>
+          {#each marksList as m}
+            <tr><td>{m.letter}</td><td>{m.page}</td><td>{m.file}</td></tr>
+          {/each}
+        </tbody></table>
+      {/if}
+      <div class="quit-actions">
+        <button use:focusOnMount onclick={() => showMarks = false}>{t('modal.close')}</button>
       </div>
     </div>
   </div>
@@ -8735,6 +8819,9 @@
   /* ── 종료 확인 ── */
   .quit-modal { min-width: 340px; }
   .quit-desc { font-size: 0.82rem; color: var(--sh-18); margin-bottom: 20px; }
+  .marks-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; margin-bottom: 20px; }
+  .marks-table th { text-align: left; font-weight: 500; color: var(--sh-18); padding: 4px 12px 4px 0; }
+  .marks-table td { padding: 3px 12px 3px 0; font-family: ui-monospace, monospace; }
   .quit-actions { display: flex; justify-content: flex-end; gap: 8px; }
   .quit-confirm-btn { background: #6b3232; border-color: #8a4444; color: var(--sh-23); }
   .quit-confirm-btn:hover { background: #7c3a3a; }

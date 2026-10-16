@@ -126,6 +126,8 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `'{a-z}` / `` `{a-z}`` | Jump to a saved mark |
 | `''` / ``` `` ``` | Back to where the last jump started (repeat to toggle between the two) |
 | `m{A-Z}` / `'{A-Z}` | Set / jump to a file mark — works across files, opens the file if needed |
+| `:marks` | List saved marks |
+| `:delm[arks] a b-d A` / `:delm!` | Delete marks (`!` deletes all a–z in this file) |
 | `Ctrl+O` / `Ctrl+I` | Jump to older / newer position — across files too, switching to or opening the file |
 | `f` | Show link hints, then jump |
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
