@@ -5571,6 +5571,9 @@
       else { setInvertPref(cmd === 'set invert' ? 'on' : 'off'); statusMsg = t(invertPages ? 'status.page_invert_on' : 'status.page_invert_off'); }
     } else if (cmd.startsWith('set lang=')) {
       setLangPref(cmd.slice(9).trim());
+    } else if (/^\d+$/.test(cmd)) {
+      // vim의 :{n}(n번째 줄로) — 여기선 n번째 페이지. {n}G와 같이 점프리스트에 남긴다
+      if (!mdMode && pageCount > 0) { pushJump(); await gotoPage(parseInt(cmd, 10) - 1); }
     } else {
       statusMsg = t('status.unknown_command', { cmd });
     }
@@ -6667,7 +6670,7 @@
               <tr><td>gg</td><td>{t('shortcuts.nav.first_page')}</td></tr>
               <tr><td>ga</td><td>{t('shortcuts.nav.char_value')}</td></tr>
               <tr><td>G</td><td>{t('shortcuts.nav.last_page')}</td></tr>
-              <tr><td>nG</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
+              <tr><td>nG / :n</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
               <tr><td>m{'{a-z}'}</td><td>{t('shortcuts.nav.mark_set')}</td></tr>
               <tr><td>'{'{a-z}'} / `{'{a-z}'}</td><td>{t('shortcuts.nav.mark_goto')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
