@@ -339,6 +339,7 @@ const DICT = {
   'status.copied_chars': { ko: '텍스트 복사됨 ({n}자)', en: 'Copied text ({n} chars)', ja: 'テキストをコピーしました ({n}文字)', 'zh-hans': '已复制文本 ({n} 字)', 'zh-hant': '已複製文字 ({n} 字)', es: 'Texto copiado ({n} caracteres)' },
   'status.mark_set': { ko: '마크 {letter} 저장됨', en: 'Mark {letter} set', ja: 'マーク {letter} を保存しました', 'zh-hans': '已保存标记 {letter}', 'zh-hant': '已儲存標記 {letter}', es: 'Marca {letter} guardada' },
   'status.mark_not_found': { ko: '마크 {letter} 없음', en: 'Mark {letter} not set', ja: 'マーク {letter} はありません', 'zh-hans': '没有标记 {letter}', 'zh-hant': '沒有標記 {letter}', es: 'La marca {letter} no existe' },
+  'status.md_marks_unsupported': { ko: '마크다운에서는 마크를 지원하지 않습니다', en: 'Marks are not supported in Markdown', ja: 'Markdown ではマークは使えません', 'zh-hans': 'Markdown 不支持标记', 'zh-hant': 'Markdown 不支援標記', es: 'Las marcas no están disponibles en Markdown' },
   'status.marks_deleted': { ko: '마크를 삭제했습니다', en: 'Marks deleted', ja: 'マークを削除しました', 'zh-hans': '已删除标记', 'zh-hant': '已刪除標記', es: 'Marcas borradas' },
   'status.delmarks_usage': { ko: '삭제할 마크를 지정하세요 (예: :delm a b-d A, :delm!)', en: 'Specify marks to delete (e.g. :delm a b-d A, :delm!)', ja: '削除するマークを指定してください (例: :delm a b-d A, :delm!)', 'zh-hans': '请指定要删除的标记 (例如 :delm a b-d A, :delm!)', 'zh-hant': '請指定要刪除的標記 (例如 :delm a b-d A, :delm!)', es: 'Indica las marcas a borrar (ej. :delm a b-d A, :delm!)' },
   'status.delmarks_invalid': { ko: '잘못된 마크: {arg}', en: 'Invalid mark: {arg}', ja: '無効なマーク: {arg}', 'zh-hans': '无效的标记: {arg}', 'zh-hant': '無效的標記: {arg}', es: 'Marca no válida: {arg}' },

@@ -4951,6 +4951,9 @@
     // ── m-prefix: m{a-z} 현재 위치를 마크로 저장 ──
     if (pendingPrefix === 'm') {
       pendingPrefix = '';
+      // 마크다운은 스크롤이 Markdown 컴포넌트 안(코드/미리보기 창)에서 일어나 mainEl 기준 위치가
+      // 의미 없다 — "저장됨"이 떠도 실제론 안 되던 걸, 안 된다고 알려주는 쪽으로 바꾼다
+      if (mdMode && /^[a-zA-Z]$/.test(key)) { statusMsg = t('status.md_marks_unsupported'); return; }
       if (/^[a-z]$/.test(key)) {
         marks[key] = { page: currentPage, y: currentPageY() };
         if (filePath) saveMarks(filePath, marks);
@@ -4967,6 +4970,10 @@
     // ── '-prefix: '{a-z} 저장해둔 마크로 이동 ──
     if (pendingPrefix === "'") {
       pendingPrefix = '';
+      // 'A는 다른 파일로 가는 용도라 마크다운에서도 그대로 둔다 — 이 파일 안 위치('a, '')만 막는다
+      if (mdMode && (/^[a-z]$/.test(key) || key === "'" || key === '`' || e.code === 'Quote' || e.code === 'Backquote')) {
+        statusMsg = t('status.md_marks_unsupported'); return;
+      }
       if (/^[a-z]$/.test(key)) {
         if (marks[key]) await gotoMark(key);
         else statusMsg = t('status.mark_not_found', { letter: key });
