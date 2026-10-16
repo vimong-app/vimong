@@ -38,6 +38,7 @@ Vimong은 화면을 마우스로 스크롤하는 대신 `j`/`k`/`gg`/`G` 같은 
 - **HWP 지원** — 한글(HWP) 문서를 PDF와 나란히 열람
 - **탭** — `Cmd+T`로 새 탭, `gt`/`gT`로 전환, `:tabonly`/`:tabmove` 등 vim 탭 명령 지원
 - **프레젠테이션 모드** — `p`로 전체화면 슬라이드쇼 전환
+- **AI 연동 (MCP)** — Claude 등 AI 어시스턴트가 지금 보는 페이지를 읽고, 하이라이트를 정리하고, 페이지를 이동
 
 각 기능의 상세 설명은 [웹사이트](https://vimong.app/ko/)에서 확인할 수 있습니다.
 
@@ -50,6 +51,43 @@ brew install --cask vimong-app/tap/vimong
 ```
 
 또는 [Releases](https://github.com/vimong-app/vimong/releases/latest)에서 `.dmg`를 내려받으세요.
+
+## AI 연동 (MCP)
+
+Vimong에는 [MCP](https://modelcontextprotocol.io) 서버가 내장되어 있어서, Claude 같은 AI 어시스턴트가 지금 열어둔 문서를 다룰 수 있습니다. "이 페이지 요약해줘", "선택한 문장 번역해줘", "이 그림 설명해줘", "3장으로 이동해줘" 같은 요청이 가능합니다.
+
+**Claude Code**에 등록:
+
+```bash
+claude mcp add -s user vimong -- /Applications/Vimong.app/Contents/MacOS/vimong --mcp
+```
+
+**Claude Desktop**은 `~/Library/Application Support/Claude/claude_desktop_config.json`에 추가한 뒤 Claude Desktop을 완전히 종료했다가 다시 실행하세요:
+
+```json
+{
+  "mcpServers": {
+    "vimong": {
+      "command": "/Applications/Vimong.app/Contents/MacOS/vimong",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+| 도구 | 기능 |
+|------|------|
+| `get_current_view` | 문서 경로, 현재 페이지, 전체 페이지 수 |
+| `get_selection` | Vimong에서 선택한 텍스트 |
+| `get_page_text` | 페이지 텍스트를 마크다운으로 (글자 크기로 제목 인식) |
+| `get_page_image` | 페이지를 이미지로 — 그림, 수식, 스캔 페이지 |
+| `get_notes` | 하이라이트(하이라이트한 문장 포함)와 메모 |
+| `get_outline` | 목차와 페이지 번호 |
+| `goto_page` | Vimong 화면을 해당 페이지로 이동 |
+| `save_pages` | 페이지를 새 PDF로 저장 |
+| `save_markdown` | 페이지를 마크다운 파일로 저장 |
+
+페이지 인자를 생략하면 지금 보는 페이지가 대상이고, `"3"`, `"1-3,7"`, `"all"` 형식도 받습니다. Vimong이 실행 중이고 문서가 열려 있어야 합니다. 디스크의 파일 기준으로 읽기 때문에 `:w`로 저장하지 않은 주석은 포함되지 않습니다.
 
 ## 지원 포맷
 

@@ -14,6 +14,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 #[cfg(target_os = "macos")]
 mod ocr_macos;
+pub mod mcp;
 use tauri::{
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem, Submenu},
     Emitter, Manager, State,
@@ -108,6 +109,22 @@ fn set_app_language(app: tauri::AppHandle, lang: String) -> Result<(), String> {
     }
     relabel_menu(&app, &labels_for(&resolved));
     Ok(())
+}
+
+// MCP 서버(vimong --mcp)가 "지금 보고 있는 문서/페이지"를 알 수 있게 기록한다 — path가
+// 비어 있으면(웰컴 화면 등) 파일을 지워서 "열린 문서 없음"이 되게 한다.
+#[tauri::command]
+fn set_current_view(path: String, page: u32, page_count: u32, selection: String) {
+    let Some(file) = mcp::current_view_path() else { return };
+    if path.is_empty() {
+        let _ = std::fs::remove_file(&file);
+        return;
+    }
+    if let Some(parent) = file.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    let view = serde_json::json!({ "path": path, "page": page, "page_count": page_count, "selection": selection });
+    let _ = std::fs::write(&file, view.to_string());
 }
 
 // window.print()는 Tauri 문서상 "모든 플랫폼에서 동작"이라고 되어 있지만, 실제로는 webview
@@ -5050,6 +5067,10 @@ pub fn run() {
             if let Some(fs) = parse_forward_search_args(&args) {
                 let _ = app.emit("forward-search", fs);
             }
+            // MCP goto_page(vimong --goto-page N, 1-based) — 프론트 gotoPage()는 0-based
+            if let Some(n) = args.iter().position(|a| a == "--goto-page").and_then(|i| args.get(i + 1)?.parse::<u32>().ok()) {
+                let _ = app.emit("goto-page", n.saturating_sub(1));
+            }
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_focus();
             }
@@ -5314,6 +5335,7 @@ pub fn run() {
             };
         })
         .invoke_handler(tauri::generate_handler![
+            set_current_view,
             read_file_bytes,
             get_file_mtime,
             open_pdf,
@@ -5395,6 +5417,11 @@ pub fn run() {
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
+            if let tauri::RunEvent::Exit = &event {
+                if let Some(file) = mcp::current_view_path() {
+                    let _ = std::fs::remove_file(file);
+                }
+            }
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 if app_handle.state::<QuitConfirmed>().0.load(Ordering::Relaxed) { return; }
                 let s = app_handle.state::<Mutex<AppState>>();

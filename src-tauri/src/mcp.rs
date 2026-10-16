@@ -1,0 +1,423 @@
+// `vimong --mcp` — Claude 같은 AI 클라이언트가 stdio로 붙는 MCP 서버.
+// 실행 중인 앱이 "지금 보고 있는 문서/페이지"를 current_view.json에 기록하고(set_current_view),
+// 이 서버는 그 파일만 읽는다 — 앱과 직접 IPC를 하지 않으니 앱이 꺼져 있으면 "열린 문서 없음"이 된다.
+// MCP는 줄 단위 JSON-RPC라 SDK 의존성 없이 serde_json만으로 처리한다.
+use serde_json::{json, Value};
+use std::io::{BufRead, Write};
+use std::path::PathBuf;
+
+// Tauri의 app_config_dir()와 같은 위치 — MCP 모드는 Tauri 앱 없이 돌기 때문에 직접 계산한다.
+pub(crate) fn current_view_path() -> Option<PathBuf> {
+    #[cfg(target_os = "macos")]
+    let base = std::env::var_os("HOME").map(|h| PathBuf::from(h).join("Library/Application Support"));
+    #[cfg(target_os = "windows")]
+    let base = std::env::var_os("APPDATA").map(PathBuf::from);
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    let base = std::env::var_os("XDG_CONFIG_HOME")
+        .map(PathBuf::from)
+        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".config")));
+    base.map(|b| b.join("com.demo.vimong").join("current_view.json"))
+}
+
+pub fn run() {
+    let mut out = std::io::stdout();
+    for line in std::io::stdin().lock().lines() {
+        let Ok(line) = line else { break };
+        let Ok(msg) = serde_json::from_str::<Value>(&line) else { continue };
+        // id가 없으면 notification(notifications/initialized 등) — 응답하지 않는다
+        let Some(id) = msg.get("id").cloned() else { continue };
+        let resp = match handle(msg["method"].as_str().unwrap_or(""), &msg["params"]) {
+            Ok(result) => json!({ "jsonrpc": "2.0", "id": id, "result": result }),
+            Err(e) => json!({ "jsonrpc": "2.0", "id": id, "error": { "code": -32601, "message": e } }),
+        };
+        let _ = writeln!(out, "{resp}");
+        let _ = out.flush();
+    }
+}
+
+fn handle(method: &str, params: &Value) -> Result<Value, String> {
+    match method {
+        "initialize" => Ok(json!({
+            "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
+            "capabilities": { "tools": {} },
+            "serverInfo": { "name": "vimong", "version": env!("CARGO_PKG_VERSION") },
+            // 사용자는 대화 밖에서 언제든 문서/페이지를 바꾸는데 서버가 그걸 먼저 알릴 방법이 없다 —
+            // 이전 결과를 재사용하지 말고 매번 다시 확인하라고 시스템 프롬프트 수준에서 못박는다.
+            "instructions": "The user switches documents, pages and text selection in Vimong at any time, outside this conversation. Whenever the user refers to the document or page they are viewing (\"this\", \"current\", \"here\", or no explicit file), call get_current_view first — never reuse a path, page or selection from earlier in the conversation. When the user refers to text they selected or highlighted on screen (\"this sentence\", \"the selected part\"), call get_selection. To look at figures, charts, equations or scanned pages, use get_page_image.",
+        })),
+        "ping" => Ok(json!({})),
+        "tools/list" => Ok(json!({ "tools": [
+            {
+                "name": "get_current_view",
+                "description": "Return the document and page the user is currently viewing in the Vimong PDF viewer: {path, page (1-based), page_count}. The view changes outside the conversation, so call this again on every request about the current document instead of reusing an earlier result.",
+                "inputSchema": { "type": "object", "properties": {} },
+            },
+            {
+                "name": "save_pages",
+                "description": "Save pages of the document currently open in Vimong as a new PDF. Defaults to the page the user is currently viewing. Saves the file as it is on disk (unsaved annotations in Vimong are not included).",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "output_path": { "type": "string", "description": "Output PDF path. Relative paths are resolved against the open document's folder." },
+                        "pages": pages_schema(),
+                    },
+                    "required": ["output_path"],
+                },
+            },
+            {
+                "name": "save_markdown",
+                "description": "Extract the text of the document currently open in Vimong and save it as a Markdown file. Headings are detected from font size; each page starts with a <!-- page N --> comment. Defaults to the page the user is currently viewing.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "output_path": { "type": "string", "description": "Output .md path. Relative paths are resolved against the open document's folder." },
+                        "pages": pages_schema(),
+                    },
+                    "required": ["output_path"],
+                },
+            },
+            {
+                "name": "get_page_text",
+                "description": "Return the text of the document currently open in Vimong as Markdown (headings detected from font size, <!-- page N --> before each page). Text only: figures, images and equations are not included. Defaults to the page the user is currently viewing.",
+                "inputSchema": { "type": "object", "properties": { "pages": pages_schema() } },
+            },
+            {
+                "name": "get_notes",
+                "description": "List the highlights (with the highlighted text) and sticky notes the user made in the PDF currently open in Vimong. Reads the file on disk, so annotations not yet saved with :w are not included. Defaults to all pages.",
+                "inputSchema": { "type": "object", "properties": { "pages": { "type": "string", "description": "1-based page spec like \"3\" or \"1-3,7\". Defaults to all pages." } } },
+            },
+            {
+                "name": "get_selection",
+                "description": "Return the text the user currently has selected in Vimong (empty if nothing is selected).",
+                "inputSchema": { "type": "object", "properties": {} },
+            },
+            {
+                "name": "get_page_image",
+                "description": "Render pages of the document currently open in Vimong as JPEG images, so you can see figures, charts, equations, layout or scanned pages that get_page_text cannot capture. At most 5 pages per call. Defaults to the page the user is currently viewing.",
+                "inputSchema": { "type": "object", "properties": {
+                    "pages": pages_schema(),
+                    "scale": { "type": "number", "description": "Render scale (1.0 = 72 dpi). Default 1.5; raise to 2-3 for small text." },
+                } },
+            },
+            {
+                "name": "goto_page",
+                "description": "Scroll Vimong to the given page so the user sees it on screen.",
+                "inputSchema": { "type": "object", "properties": { "page": { "type": "integer", "description": "1-based page number." } }, "required": ["page"] },
+            },
+            {
+                "name": "get_outline",
+                "description": "Return the table of contents (outline/bookmarks) of the document currently open in Vimong, with 1-based page numbers. Use it to map chapter or section names to page ranges.",
+                "inputSchema": { "type": "object", "properties": {} },
+            },
+        ]})),
+        // 도구 실행 실패는 JSON-RPC 에러가 아니라 isError 결과로 돌려줘야 AI가 메시지를 읽는다
+        "tools/call" => Ok(match call_tool(params["name"].as_str().unwrap_or(""), &params["arguments"]) {
+            Ok(content) => json!({ "content": content }),
+            Err(e) => json!({ "content": [{ "type": "text", "text": e }], "isError": true }),
+        }),
+        _ => Err(format!("method not found: {method}")),
+    }
+}
+
+// ponytail: 앱이 비정상 종료하면 current_view.json이 남아 오래된 상태를 돌려준다 — 문제되면 pid를 같이 기록해 살아있는지 확인
+fn read_view() -> Result<Value, String> {
+    let no_view = || "No document is open in Vimong (or Vimong is not running).".to_string();
+    let text = current_view_path().and_then(|p| std::fs::read_to_string(p).ok()).ok_or_else(no_view)?;
+    serde_json::from_str(&text).map_err(|_| no_view())
+}
+
+// 도구 결과가 너무 크면 대화 컨텍스트를 다 잡아먹으니 자른다 — 더 필요하면 pages를 나눠 다시 부르게 안내
+const MAX_TEXT_CHARS: usize = 100_000;
+
+const MAX_IMAGE_PAGES: usize = 5; // 페이지 이미지는 한 장에 수백 KB라 한 번에 너무 많이 보내지 않는다
+
+// 결과는 MCP content 배열 — 대부분 텍스트 하나, get_page_image만 이미지 여러 개
+fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
+    const TOOLS: [&str; 9] = [
+        "get_current_view", "save_pages", "save_markdown", "get_page_text", "get_notes", "get_outline",
+        "get_selection", "get_page_image", "goto_page",
+    ];
+    if !TOOLS.contains(&name) {
+        return Err(format!("unknown tool: {name}"));
+    }
+    let text = |s: String| vec![json!({ "type": "text", "text": s })];
+    let view = read_view()?;
+    match name {
+        "get_current_view" => return Ok(text(view.to_string())),
+        "get_selection" => {
+            let sel = view["selection"].as_str().unwrap_or("");
+            return Ok(text(if sel.is_empty() { "No text is selected in Vimong.".to_string() } else { sel.to_string() }));
+        }
+        "goto_page" => {
+            let page = args["page"].as_u64().ok_or("page is required")?;
+            let page_count = view["page_count"].as_u64().unwrap_or(0);
+            if page == 0 || page > page_count {
+                return Err(format!("page must be between 1 and {page_count}"));
+            }
+            // 이미 떠 있는 앱으로 single-instance 인자 전달(forward-search와 같은 경로) — 자식은
+            // 인자만 넘기고 바로 끝난다. 출력이 MCP stdout에 섞이면 안 되니 버린다.
+            // ponytail: current_view.json이 비정상 종료로 남아 있으면 앱이 새로 뜬다(페이지 이동은 무시됨)
+            let status = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+                .args(["--goto-page", &page.to_string()])
+                .stdin(std::process::Stdio::null())
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status()
+                .map_err(|e| e.to_string())?;
+            if !status.success() {
+                return Err(format!("failed to signal Vimong ({status})"));
+            }
+            return Ok(text(format!("Moved Vimong to page {page}")));
+        }
+        _ => {}
+    }
+    let pages = page_spec(args, &view, name == "get_notes");
+    if name == "get_page_image" {
+        let path = view["path"].as_str().ok_or("invalid view state")?;
+        let page_count = view["page_count"].as_u64().unwrap_or(0) as usize;
+        let scale = args["scale"].as_f64().unwrap_or(1.5).clamp(0.5, 4.0) as f32;
+        return page_images(path, &pages, page_count, scale);
+    }
+    call_text_tool(name, args, &view, &pages).map(text)
+}
+
+// pages 인자 해석 — 생략=현재 페이지(get_notes만 전체), "all"=전체, 나머지는 "1-3,7" 형식 그대로
+fn page_spec(args: &Value, view: &Value, default_all: bool) -> String {
+    let all = format!("1-{}", view["page_count"].as_u64().unwrap_or(0));
+    match args["pages"].as_str() {
+        None if default_all => all,
+        None => view["page"].to_string(),
+        Some("all") => all,
+        Some(s) => s.to_string(),
+    }
+}
+
+fn page_images(path: &str, spec: &str, page_count: usize, scale: f32) -> Result<Vec<Value>, String> {
+    use base64::Engine;
+    let pages = super::parse_page_spec(spec, page_count)?;
+    if pages.len() > MAX_IMAGE_PAGES {
+        return Err(format!("At most {MAX_IMAGE_PAGES} pages per call — split the request."));
+    }
+    let doc = open_doc(path)?;
+    let matrix = mupdf::Matrix::new_scale(scale, scale);
+    let mut content = Vec::new();
+    for i in pages {
+        let pixmap = doc
+            .load_page(i as i32)
+            .and_then(|p| p.to_pixmap(&matrix, &mupdf::Colorspace::device_rgb(), false, true))
+            .map_err(|e| e.to_string())?;
+        let mut jpeg = Vec::new();
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut jpeg, 85)
+            .encode(pixmap.samples(), pixmap.width(), pixmap.height(), image::ExtendedColorType::Rgb8)
+            .map_err(|e| e.to_string())?;
+        content.push(json!({ "type": "text", "text": format!("Page {}", i + 1) }));
+        content.push(json!({
+            "type": "image",
+            "data": base64::engine::general_purpose::STANDARD.encode(&jpeg),
+            "mimeType": "image/jpeg",
+        }));
+    }
+    Ok(content)
+}
+
+fn call_text_tool(name: &str, args: &Value, view: &Value, pages: &str) -> Result<String, String> {
+    let pages = pages.to_string();
+    let path = view["path"].as_str().ok_or("invalid view state")?;
+    let page_count = view["page_count"].as_u64().unwrap_or(0) as usize;
+    match name {
+        "get_page_text" => {
+            let md = to_markdown(path, &pages, page_count)?;
+            if md.chars().count() <= MAX_TEXT_CHARS {
+                return Ok(md);
+            }
+            let cut: String = md.chars().take(MAX_TEXT_CHARS).collect();
+            Ok(format!("{cut}\n\n[Truncated at {MAX_TEXT_CHARS} characters — request fewer pages to read the rest.]"))
+        }
+        "get_notes" => notes(path, &pages, page_count),
+        "get_outline" => outline(path),
+        _ => {
+            let out = args["output_path"].as_str().ok_or("output_path is required")?;
+            let out = super::resolve_out_path(path, out.to_string());
+            if name == "save_pages" {
+                super::write_pdf_pages(path, &out, Some(&pages), page_count, None)?;
+            } else {
+                std::fs::write(&out, to_markdown(path, &pages, page_count)?).map_err(|e| e.to_string())?;
+            }
+            Ok(format!("Saved page(s) {pages} of {path} to {out}"))
+        }
+    }
+}
+
+fn open_doc(path: &str) -> Result<mupdf::Document, String> {
+    let doc = mupdf::Document::open(path).map_err(|e| e.to_string())?;
+    if doc.needs_password().map_err(|e| e.to_string())? {
+        return Err("Password-protected documents are not supported".to_string());
+    }
+    Ok(doc)
+}
+
+// 하이라이트 주석엔 글자 자체가 없고 영역(quad)만 있어서, 페이지 텍스트에서 그 영역 안에 중심이
+// 들어오는 글자를 모아 "하이라이트한 문장"을 복원한다. 메모(Text 주석)는 notes_on_page 재사용.
+fn notes(path: &str, spec: &str, page_count: usize) -> Result<String, String> {
+    use mupdf::pdf::{PdfAnnotationType, PdfDocument, PdfPage};
+    let pdf: PdfDocument = open_doc(path)?.try_into().map_err(|_| "Annotations are only supported for PDF files".to_string())?;
+    let mut out = String::new();
+    for i in super::parse_page_spec(spec, page_count)? {
+        let page: PdfPage = pdf.load_page(i as i32).and_then(|p| p.try_into()).map_err(|e| e.to_string())?;
+        let mut items = Vec::new();
+        let mut text_page = None;
+        for a in page.annotations() {
+            if !matches!(a.r#type(), Ok(PdfAnnotationType::Highlight)) {
+                continue;
+            }
+            let quads: Vec<[f32; 4]> = a.quad_points().unwrap_or_default().iter().map(super::quad_to_rect).collect();
+            if text_page.is_none() {
+                text_page = Some(page.to_text_page(mupdf::TextPageFlags::DEHYPHENATE).map_err(|e| e.to_string())?);
+            }
+            let mut lines = Vec::new();
+            for block in text_page.as_ref().unwrap().blocks() {
+                for line in block.lines() {
+                    let s: String = line
+                        .chars()
+                        .filter(|c| {
+                            let [x0, y0, x1, y1] = super::quad_to_rect(&c.quad());
+                            let (cx, cy) = ((x0 + x1) / 2.0, (y0 + y1) / 2.0);
+                            quads.iter().any(|q| q[0] <= cx && cx <= q[2] && q[1] <= cy && cy <= q[3])
+                        })
+                        .filter_map(|c| c.char())
+                        .collect();
+                    if !s.trim().is_empty() {
+                        lines.push(s.trim().to_string());
+                    }
+                }
+            }
+            let comment = a.contents().ok().flatten().filter(|c| !c.is_empty()).map(|c| format!(" — comment: {c}")).unwrap_or_default();
+            items.push(format!("- highlight: \"{}\"{comment}", lines.join(" ")));
+        }
+        for n in super::notes_on_page(&page) {
+            items.push(format!("- note: {}", n.contents));
+        }
+        if !items.is_empty() {
+            out += &format!("## Page {}\n{}\n\n", i + 1, items.join("\n"));
+        }
+    }
+    Ok(if out.is_empty() { "No highlights or notes found.".to_string() } else { out })
+}
+
+fn outline(path: &str) -> Result<String, String> {
+    fn walk(entries: &[super::TocEntry], depth: usize, out: &mut String) {
+        for e in entries {
+            let page = e.page.map(|p| format!(" (p. {})", p + 1)).unwrap_or_default();
+            *out += &format!("{}- {}{page}\n", "  ".repeat(depth), e.title);
+            walk(&e.children, depth + 1, out);
+        }
+    }
+    let toc: Vec<super::TocEntry> = open_doc(path)?.outlines().map_err(|e| e.to_string())?.into_iter().map(super::convert_outline).collect();
+    let mut out = String::new();
+    walk(&toc, 0, &mut out);
+    Ok(if out.is_empty() { "This document has no outline.".to_string() } else { out })
+}
+
+fn pages_schema() -> Value {
+    json!({ "type": "string", "description": "1-based page spec like \"3\" or \"1-3,7\", or \"all\". Defaults to the page the user is currently viewing." })
+}
+
+// MuPDF에 마크다운 출력이 없어서 텍스트 블록(문단)을 직접 순회한다 — 본문보다 글자가 큰 짧은 블록을
+// 제목으로 보고, 큰 크기부터 #, ##, ### 순서로 수준을 매긴다.
+// ponytail: 글자 크기만 본다 — 본문 크기의 굵은 제목, 목록, 표는 평문 문단으로 나온다. 필요하면
+// TextCharFlags(BOLD)와 줄 머리 기호(•, 1.)로 확장
+fn to_markdown(path: &str, spec: &str, page_count: usize) -> Result<String, String> {
+    let doc = open_doc(path)?;
+    let mut pages = Vec::new();
+    for i in super::parse_page_spec(spec, page_count)? {
+        let page = doc.load_page(i as i32).map_err(|e| e.to_string())?;
+        let text = page.to_text_page(mupdf::TextPageFlags::DEHYPHENATE).map_err(|e| e.to_string())?;
+        let mut blocks = Vec::new();
+        for block in text.blocks() {
+            let (mut sizes, mut lines) = (Vec::new(), Vec::new());
+            for line in block.lines() {
+                let s: String = line.chars().filter_map(|c| { sizes.push(c.size()); c.char() }).collect();
+                lines.push(s.trim().to_string());
+            }
+            let text = lines.join(" ").trim().to_string();
+            if !text.is_empty() {
+                blocks.push(Block { size: sizes.iter().sum::<f32>() / sizes.len() as f32, chars: sizes.len(), text });
+            }
+        }
+        pages.push((i + 1, blocks));
+    }
+    Ok(blocks_to_markdown(&pages))
+}
+
+struct Block {
+    size: f32,   // 블록 글자 크기 평균(pt)
+    chars: usize,
+    text: String,
+}
+
+const HEADING_MIN_RATIO: f32 = 1.15; // 본문보다 이만큼 커야 제목
+const HEADING_MAX_CHARS: usize = 120; // 이보다 긴 블록은 글자가 커도 문단(슬라이드 본문 등)
+
+fn blocks_to_markdown(pages: &[(usize, Vec<Block>)]) -> String {
+    let round = |s: f32| (s * 2.0).round() / 2.0; // 0.5pt 단위로 묶어 미세한 차이를 무시
+    // 본문 크기 = 글자 수 기준으로 가장 많이 쓰인 크기
+    let mut weight: Vec<(f32, usize)> = Vec::new();
+    for b in pages.iter().flat_map(|(_, bs)| bs) {
+        match weight.iter_mut().find(|(s, _)| *s == round(b.size)) {
+            Some(w) => w.1 += b.chars,
+            None => weight.push((round(b.size), b.chars)),
+        }
+    }
+    let body = weight.iter().max_by_key(|w| w.1).map_or(0.0, |w| w.0);
+    let is_heading = |b: &Block| b.size >= body * HEADING_MIN_RATIO && b.text.chars().count() <= HEADING_MAX_CHARS;
+    let mut levels: Vec<f32> = pages.iter().flat_map(|(_, bs)| bs).filter(|b| is_heading(b)).map(|b| round(b.size)).collect();
+    levels.sort_by(|a, b| b.total_cmp(a));
+    levels.dedup();
+
+    let mut md = String::new();
+    for (num, blocks) in pages {
+        md += &format!("<!-- page {num} -->\n\n");
+        for b in blocks {
+            if is_heading(b) {
+                let level = levels.iter().position(|&s| s == round(b.size)).unwrap_or(0).min(2) + 1;
+                md += &format!("{} {}\n\n", "#".repeat(level), b.text);
+            } else {
+                md += &format!("{}\n\n", b.text);
+            }
+        }
+    }
+    md
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn lists_tools_and_reports_unknown_method() {
+        let tools = handle("tools/list", &Value::Null).unwrap();
+        assert_eq!(tools["tools"].as_array().unwrap().len(), 9);
+        assert!(handle("nope", &Value::Null).is_err());
+        let r = handle("tools/call", &json!({ "name": "nope", "arguments": {} })).unwrap();
+        assert_eq!(r["isError"], true);
+    }
+
+    #[test]
+    fn larger_short_blocks_become_headings() {
+        let b = |size, text: &str| Block { size, chars: text.len(), text: text.to_string() };
+        let pages = vec![(1, vec![
+            b(20.0, "Title"),
+            b(14.0, "Section"),
+            b(10.0, &format!("Body text{}", " filler".repeat(60))), // 글자 수가 가장 많은 크기 = 본문
+            b(14.2, "Another section"),
+            b(14.0, &"x".repeat(200)), // 글자는 크지만 너무 길어서 문단
+        ])];
+        let md = blocks_to_markdown(&pages);
+        assert!(md.contains("<!-- page 1 -->"));
+        assert!(md.contains("\n# Title\n"));
+        assert!(md.contains("\n## Section\n"));
+        assert!(md.contains("\n## Another section\n"));
+        assert!(md.contains("\nBody text"));
+        assert!(!md.contains("# xxx"));
+    }
+}

@@ -424,6 +424,13 @@
   $effect(() => {
     if (filePath && pageCount > 0) saveLastPage(filePath, currentPage, currentFileMtime);
   });
+  // MCP 서버(vimong --mcp)가 "지금 보고 있는 페이지"와 선택한 텍스트를 알 수 있게 Rust 쪽에 알린다.
+  // hwp는 MuPDF로 못 여니 제외.
+  $effect(() => {
+    invoke('set_current_view', {
+      path: hwpMode ? '' : filePath, page: currentPage + 1, pageCount, selection: selection ? selectionText() : '',
+    });
+  });
 
   // ── 탭 세션 복원 (설정에서 켰을 때만 시작 시 되살림) ──────────
   // 설정이 꺼져 있어도 기록은 계속해둔다 — 나중에 켰을 때 그 시점의 열린 탭부터 바로
@@ -3311,6 +3318,8 @@
     const pendingForwardSearch = await invoke('take_pending_forward_search');
     if (pendingForwardSearch) await handleForwardSearch(pendingForwardSearch);
     unlistenFns.push(await listen('forward-search', (e) => handleForwardSearch(e.payload)));
+    // MCP goto_page — 이미 떠 있는 인스턴스로만 온다(MCP가 열린 문서가 있을 때만 보냄)
+    unlistenFns.push(await listen('goto-page', (e) => gotoPage(e.payload)));
 
     // Finder/브라우저에서 PDF를 더블클릭해 열었을 때 — forward-search와 같은 패턴. 이 시점에
     // 세션 복원(위)이 이미 탭을 채워놨을 수 있으니, 지금 탭이 비어 있을 때만(진짜 콜드 스타트로

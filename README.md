@@ -39,6 +39,7 @@ conventions Vim users already know.
 - **HWP support** — open Korean HWP documents right alongside your PDFs
 - **Tabs** — `Cmd+T` for a new tab, `gt`/`gT` to switch, `:tabonly`/`:tabmove` and other vim tab commands
 - **Presentation mode** — `p` to enter a fullscreen slideshow
+- **AI integration (MCP)** — let Claude and other AI assistants see the page you're on, read your highlights, and jump pages for you
 
 See full descriptions on the [website](https://vimong.app/en/).
 
@@ -51,6 +52,43 @@ brew install --cask vimong-app/tap/vimong
 ```
 
 Or download the `.dmg` from [Releases](https://github.com/vimong-app/vimong/releases/latest).
+
+## AI integration (MCP)
+
+Vimong ships a built-in [MCP](https://modelcontextprotocol.io) server, so AI assistants such as Claude can work with the document you have open — "summarize this page", "translate the selected sentence", "explain this figure", "go to chapter 3".
+
+Register it with **Claude Code**:
+
+```bash
+claude mcp add -s user vimong -- /Applications/Vimong.app/Contents/MacOS/vimong --mcp
+```
+
+Or with **Claude Desktop**, in `~/Library/Application Support/Claude/claude_desktop_config.json` (then quit and relaunch Claude Desktop):
+
+```json
+{
+  "mcpServers": {
+    "vimong": {
+      "command": "/Applications/Vimong.app/Contents/MacOS/vimong",
+      "args": ["--mcp"]
+    }
+  }
+}
+```
+
+| Tool | What it does |
+|------|--------------|
+| `get_current_view` | Document path, current page and page count |
+| `get_selection` | Text selected in Vimong |
+| `get_page_text` | Page text as Markdown (headings detected from font size) |
+| `get_page_image` | Page rendered as an image — figures, equations, scanned pages |
+| `get_notes` | Your highlights (with the highlighted text) and notes |
+| `get_outline` | Table of contents with page numbers |
+| `goto_page` | Move Vimong to a page |
+| `save_pages` | Save pages as a new PDF |
+| `save_markdown` | Save pages as a Markdown file |
+
+Page arguments default to the page you're viewing; they also accept `"3"`, `"1-3,7"` or `"all"`. Vimong must be running with a document open. Tools read the file on disk, so annotations not yet saved with `:w` are not included.
 
 ## Supported formats
 
