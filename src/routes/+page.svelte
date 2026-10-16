@@ -43,6 +43,17 @@
   let themePref = $state(loadThemePref());
   let theme = $derived(themePref === 'auto' ? detectSystemTheme() : themePref);
   $effect(() => { document.body.classList.toggle('theme-light', theme === 'light'); });
+  // 페이지 다크 모드(색 반전) — 'off' | 'on' | 'auto'(앱 테마가 다크일 때만). 기존 사용자 화면이
+  // 갑자기 바뀌지 않게 기본은 off. CSS 필터라 인쇄/내보내기 결과엔 영향 없다.
+  const PAGE_INVERT_KEY = 'vimong-page-invert';
+  let invertPref = $state(localStorage.getItem(PAGE_INVERT_KEY) || 'off');
+  let invertPages = $derived(invertPref === 'auto' ? theme === 'dark' : invertPref === 'on');
+  $effect(() => { document.body.classList.toggle('invert-pages', invertPages); });
+  /** @param {string} pref */
+  function setInvertPref(pref) {
+    invertPref = pref;
+    localStorage.setItem(PAGE_INVERT_KEY, pref);
+  }
 
   // ── 프레젠테이션(p) — 파워포인트 슬라이드 쇼처럼 ────────────────
   // 전체화면과 슬라이드형 보기(한 페이지를 화면 가운데에 검은 배경으로 꽉 채움, 스크롤
@@ -165,6 +176,7 @@
   let showSettings = $state(false);
   let settingsLangDraft = $state('auto');
   let settingsThemeDraft = $state('auto');
+  let settingsInvertDraft = $state('off');
   let settingsMdThemeDraft = $state('auto');
   let settingsMdCodeFontDraft = $state('default');
   const SYNCTEX_EDITOR_KEY = 'vimong-synctex-editor';
@@ -332,6 +344,7 @@
     settingsTab = 'ui';
     settingsLangDraft = langPref;
     settingsThemeDraft = themePref;
+    settingsInvertDraft = invertPref;
     settingsSynctexDraft = synctexEditorCmd;
     settingsConfirmCloseTabsDraft = confirmCloseTabs;
     settingsResumeLastPageDraft = resumeLastPage;
@@ -345,6 +358,7 @@
     setLangPref(settingsLangDraft);
     themePref = settingsThemeDraft;
     saveThemePref(settingsThemeDraft);
+    setInvertPref(settingsInvertDraft);
     synctexEditorCmd = settingsSynctexDraft;
     localStorage.setItem(SYNCTEX_EDITOR_KEY, synctexEditorCmd);
     confirmCloseTabs = settingsConfirmCloseTabsDraft;
@@ -4838,6 +4852,9 @@
       if (mdMode) mdComponentRef?.scrollByX(-60);
       else if (cursor) charMotion(-1);
       else mainEl.scrollBy(-60, 0);
+    } else if (e.ctrlKey && !e.metaKey && key === 'r') {
+      e.preventDefault(); // zathura의 recolor 키 — 일반 r(페이지 회전) 분기보다 먼저 잡아야 한다
+      togglePageInvert();
     } else if (e.ctrlKey && !e.metaKey && key === 'o') {
       e.preventDefault(); // Cmd+O(파일 열기)와 안 겹치게 Ctrl만 받는다
       await jumpBack();
@@ -5549,11 +5566,20 @@
       await showSelectionFont();
     } else if (cmd === 'set' || cmd === 'settings') {
       openSettings();
+    } else if (cmd === 'set invert' || cmd === 'set noinvert' || cmd === 'set invert!') {
+      if (cmd === 'set invert!') togglePageInvert();
+      else { setInvertPref(cmd === 'set invert' ? 'on' : 'off'); statusMsg = t(invertPages ? 'status.page_invert_on' : 'status.page_invert_off'); }
     } else if (cmd.startsWith('set lang=')) {
       setLangPref(cmd.slice(9).trim());
     } else {
       statusMsg = t('status.unknown_command', { cmd });
     }
+  }
+
+  // 'auto'여도 지금 보이는 상태의 반대로 고정한다 — 토글한 결과가 눈에 보이는 그대로여야 하니까
+  function togglePageInvert() {
+    setInvertPref(invertPages ? 'off' : 'on');
+    statusMsg = t(invertPages ? 'status.page_invert_on' : 'status.page_invert_off');
   }
 
   async function googleSearch(query) {
@@ -6644,7 +6670,7 @@
               <tr><td>nG</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
               <tr><td>m{'{a-z}'}</td><td>{t('shortcuts.nav.mark_set')}</td></tr>
               <tr><td>'{'{a-z}'} / `{'{a-z}'}</td><td>{t('shortcuts.nav.mark_goto')}</td></tr>
-              <tr><td>Ctrl+O / Ctrl+I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
+              <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
               <tr><td>u / ⌘Z</td><td>{t('shortcuts.nav.undo_highlight')}</td></tr>
@@ -6655,6 +6681,7 @@
               <tr><td>{t('shortcuts.nav.toc_hl_key')}</td><td>{t('shortcuts.nav.toc_hl_desc')}</td></tr>
               <tr><td>⌘⇧T</td><td>{t('shortcuts.nav.toggle_sidebar')}</td></tr>
               <tr><td>p</td><td>{t('shortcuts.nav.presentation')}</td></tr>
+              <tr><td>⌃R</td><td>{t('shortcuts.nav.page_invert')}</td></tr>
               <tr><td>⌃⌘F</td><td>{t('shortcuts.nav.fullscreen')}</td></tr>
             </tbody></table>
           {:else if shortcutsTab === 'zoom'}
@@ -6892,6 +6919,14 @@
             <option value="auto">{t('settings.theme_auto')}</option>
             <option value="light">{t('settings.theme_light')}</option>
             <option value="dark">{t('settings.theme_dark')}</option>
+          </select>
+        </div>
+        <div class="settings-row">
+          <label for="settings-invert">{t('settings.page_invert')}</label>
+          <select id="settings-invert" bind:value={settingsInvertDraft}>
+            <option value="off">{t('settings.page_invert_off')}</option>
+            <option value="on">{t('settings.page_invert_on')}</option>
+            <option value="auto">{t('settings.page_invert_auto')}</option>
           </select>
         </div>
         <label class="export-merge-row">
@@ -7764,6 +7799,11 @@
   }
 
   .page-wrap canvas { display: block; background: #fff; width: 100%; height: 100%; }
+  /* 페이지 다크 모드 — hue-rotate로 색상은 되돌리고 밝기만 뒤집는다. 0.88이라 순검정 대신 짙은 회색.
+     검색/선택 오버레이는 canvas 형제라 필터 밖 — 원래 색 유지. hwp는 SVG를 감싼 div에 건다. */
+  :global(body.invert-pages) .page-wrap canvas,
+  :global(body.invert-pages) .page-wrap > div:first-child,
+  :global(body.invert-pages) .thumb-item img { filter: invert(0.88) hue-rotate(180deg); }
 
   /* 두 페이지: 가로로 나란히. 연속 모드들: 세로/가로로 죽 이어 붙임 */
   .viewer-two { flex-direction: row; gap: 4px; }

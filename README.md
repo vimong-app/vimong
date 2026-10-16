@@ -126,6 +126,7 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 | `f` | Show link hints, then jump |
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
 | `p` | Presentation mode (fullscreen slideshow) |
+| `Ctrl+R` / `:set invert` | Toggle page dark mode (invert page colors) |
 
 ### Zoom
 
