@@ -122,6 +122,7 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 | `nG` / `:n` | Go to page n (e.g. `5G`, `:5`) |
 | `m{a-z}` | Save current position as a mark (kept per file, restored when you reopen it) |
 | `'{a-z}` / `` `{a-z}`` | Jump to a saved mark |
+| `''` / ``` `` ``` | Back to where the last jump started (repeat to toggle between the two) |
 | `m{A-Z}` / `'{A-Z}` | Set / jump to a file mark — works across files, opens the file if needed |
 | `Ctrl+O` / `Ctrl+I` | Jump to older / newer position — across files too, switching to or opening the file |
 | `f` | Show link hints, then jump |

@@ -3988,9 +3988,22 @@
     return filePath && !mdMode ? { path: filePath, page: currentPage, y: currentPageY() } : null;
   }
 
+  // vim의 ' 마크 — 파일별 "마지막 점프의 출발점". pushJump가 같이 갱신한다
+  /** @type {Record<string, {path: string, page: number, y: number}>} */
+  const prevJumpPos = {};
+
+  // '' — 그 출발점으로 가면서 지금 위치를 새 출발점으로 남겨서, 반복하면 두 위치를 왕복한다
+  async function gotoPrevJumpPos() {
+    const target = prevJumpPos[filePath];
+    if (!target) { statusMsg = t('status.mark_not_found', { letter: "'" }); return; }
+    pushJump();
+    await gotoPageAndY(target.page, target.y);
+  }
+
   function pushJump() {
     const pos = herePos();
     if (!pos) return;
+    prevJumpPos[pos.path] = pos;
     jumps.splice(jumpIdx);
     jumps.push(pos);
     if (jumps.length > 100) jumps.shift();
@@ -4870,6 +4883,11 @@
       }
       if (/^[A-Z]$/.test(key)) {
         await gotoGlobalMark(key);
+        return;
+      }
+      // '' / `` — 직전 점프의 출발점. 프리픽스를 걸 때와 같은 이유(데드키)로 e.code도 본다
+      if (key === "'" || key === '`' || e.code === 'Quote' || e.code === 'Backquote') {
+        await gotoPrevJumpPos();
         return;
       }
     }
@@ -6737,6 +6755,7 @@
               <tr><td>nG / :n</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
               <tr><td>m{'{a-z}'}</td><td>{t('shortcuts.nav.mark_set')}</td></tr>
               <tr><td>'{'{a-z}'} / `{'{a-z}'}</td><td>{t('shortcuts.nav.mark_goto')}</td></tr>
+              <tr><td>'' / ``</td><td>{t('shortcuts.nav.jump_toggle')}</td></tr>
               <tr><td>m{'{A-Z}'} / '{'{A-Z}'}</td><td>{t('shortcuts.nav.global_mark')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
