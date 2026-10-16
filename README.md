@@ -168,6 +168,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `:tabonly` / `:tabo` | Close all other tabs |
 | `gt` / `gT` | Next / previous tab |
 | `ngt` | Go to tab n (e.g. `2gt`) |
+| `g<Tab>` | Go to the last accessed tab (repeat to toggle) |
 | `:tabmove [N]` | Move tab position |
 
 ## Development

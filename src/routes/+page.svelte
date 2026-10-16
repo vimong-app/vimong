@@ -2851,8 +2851,13 @@
   let tabLabels = $state(['New Tab']);   // 탭바 표시용
   let currentTabIdx = $state(0);
 
+  // g<Tab>용 "직전에 보던 탭" — 인덱스 대신 상태 객체 자체를 기억한다. 탭을 닫거나 옮겨도(splice)
+  // 객체는 그대로 따라가고, 닫혔으면 indexOf가 -1. saveTab은 탭을 떠날 때만 불리므로 여기서 갱신한다.
+  /** @type {any} */
+  let prevTabState = null;
+
   function saveTab() {
-    tabStates[currentTabIdx] = {
+    prevTabState = tabStates[currentTabIdx] = {
       filePath, pageCount, currentPage, scale, pageRotations,
       thumbnails, allSearchResults, pageHighlights,
       lastSearch, searchResultIdx,
@@ -4912,6 +4917,13 @@
         await switchToTab((currentTabIdx - 1 + tabLabels.length) % tabLabels.length);
         return;
       }
+      if (key === 'Tab') {
+        e.preventDefault(); // 기본 포커스 이동과 안 겹치게
+        const idx = tabStates.indexOf(prevTabState);
+        if (idx === -1 || idx === currentTabIdx) statusMsg = t('status.no_prev_tab');
+        else await switchToTab(idx);
+        return;
+      }
     }
 
     // ── m-prefix: m{a-z} 현재 위치를 마크로 저장 ──
@@ -6889,6 +6901,7 @@
               <tr><td>gt / gT</td><td>{t('shortcuts.tab.next_prev')}</td></tr>
               <tr><td>⌘⇧] / ⌘⇧[</td><td>{t('shortcuts.tab.next_prev')}</td></tr>
               <tr><td>ngt</td><td>{t('shortcuts.tab.goto_n')}</td></tr>
+              <tr><td>g&lt;Tab&gt;</td><td>{t('shortcuts.tab.last')}</td></tr>
               <tr><td>⌘⇧R</td><td>{t('shortcuts.tab.reopen')}</td></tr>
             </tbody></table>
           {/if}
