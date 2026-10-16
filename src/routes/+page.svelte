@@ -2126,6 +2126,57 @@
     });
   });
 
+  // ── 커서 줄 이동 (j/k) ── Rust가 MuPDF의 줄 정보를 줄 끝 공백 하나로만 남겨서, 글자 좌표로 줄을
+  // 다시 나눈다: 글자 순서대로 훑다가 세로 중심이 직전 글자 높이 범위를 벗어나면 새 줄. 2단이면
+  // 왼쪽 단 끝 → 오른쪽 단 첫 줄로 이어진다. 공백·폭 이상한 글자는 줄 경계 판단에서 빼고 직전 줄에 붙인다.
+  /** @type {WeakMap<object, {lineOf: number[], lines: number[][]}>} */
+  const charLinesCache = new WeakMap(); // 글자 배열이 바뀌면(다시 로드) 자동으로 새로 계산
+  /** @param {any[]} chars @param {number} pageW */
+  function charLines(chars, pageW) {
+    let hit = charLinesCache.get(chars);
+    if (hit) return hit;
+    /** @type {number[]} */ const lineOf = [];
+    /** @type {number[][]} */ const lines = [];
+    let prev = null;
+    for (let i = 0; i < chars.length; i++) {
+      const c = chars[i];
+      if (charClass(c.ch) === 0 || !isRealChar(c, pageW)) { lineOf.push(Math.max(lines.length - 1, 0)); continue; }
+      const cy = (c.rect[1] + c.rect[3]) / 2;
+      if (!prev || cy < prev.rect[1] || cy > prev.rect[3]) lines.push([]);
+      lines[lines.length - 1].push(i);
+      lineOf.push(lines.length - 1);
+      prev = c;
+    }
+    hit = { lineOf, lines };
+    charLinesCache.set(chars, hit);
+    return hit;
+  }
+
+  // 줄을 옮겨도 처음 출발한 가로 위치를 기억한다(vim의 열 기억) — 짧은 줄을 지나도 원래 x로 돌아오게.
+  // 커서가 다른 방법(w/h/클릭/검색)으로 바뀌었으면 idx가 달라져 거기서 새로 잡는다.
+  /** @type {{idx: number, x: number} | null} */
+  let lineGoal = null;
+
+  /** @param {number} n 아래로 +, 위로 - (줄 수) */
+  function lineMotion(n) {
+    if (!cursor) return;
+    const chars = pageCharCache.get(cursor.page);
+    if (!chars || chars.length === 0) return;
+    const { lineOf, lines } = charLines(chars, pageSizes[cursor.page]?.[0] ?? Infinity);
+    if (lines.length === 0) return;
+    const cur = lineOf[cursor.idx] ?? 0;
+    const target = Math.max(0, Math.min(cur + n, lines.length - 1)); // 페이지 안에서만
+    if (target === cur) return;
+    const cx = (/** @type {any} */ c) => (c.rect[0] + c.rect[2]) / 2;
+    const goalX = lineGoal?.idx === cursor.idx ? lineGoal.x : cx(chars[cursor.idx]);
+    let idx = lines[target][0];
+    for (const i of lines[target]) if (Math.abs(cx(chars[i]) - goalX) < Math.abs(cx(chars[idx]) - goalX)) idx = i;
+    if (visualMode) { if (anchorIdx === null) anchorIdx = cursor.idx; } // 선택 중이면 anchor 고정, 범위만 줄 단위로
+    else anchorIdx = idx;
+    cursor = { page: cursor.page, idx };
+    lineGoal = { idx, x: goalX };
+  }
+
   // 커서가 있을 때 h/l로 한 글자씩 이동 — dir: -1(왼쪽/뒤) | 1(오른쪽/앞)
   function charMotion(dir) {
     if (!cursor) return;
@@ -5068,7 +5119,12 @@
 
     // ── normal-mode commands ──
     const pageStep = isTwoUp(viewMode) ? 2 : 1;
-    if (key === 'j') {
+    // 커서가 보일 때(텍스트 선택 도구, 또는 선택 중)만 j/k가 줄 이동 — 손 도구에서 검색해 생긴 안 보이는
+    // 커서는 그대로 두고 지금처럼 스크롤한다. Esc로 커서를 없애면 다시 스크롤 키.
+    const caretLines = !mdMode && cursor && (textSelectMode || visualMode);
+    if (caretLines && (key === 'j' || key === 'k')) {
+      lineMotion(key === 'j' ? count : -count);
+    } else if (key === 'j') {
       if (mdMode) { mdComponentRef?.scrollBy(60 * count); }
       // 연속 모드는 페이지 경계에서 안 끊기고 그대로 흘러가는 게 핵심이라 스냅 없이 스크롤만
       else if (isContinuous(viewMode)) { mainEl.scrollBy(0, 60 * count); }
