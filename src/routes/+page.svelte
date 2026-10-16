@@ -4964,6 +4964,7 @@
         await switchToTab((currentTabIdx - 1 + tabLabels.length) % tabLabels.length);
         return;
       }
+      if (key === '*' || key === '#') { await starSearch(key === '*' ? 1 : -1, false, savedN ?? 1); return; }
       if (key === 'Tab') {
         e.preventDefault(); // 기본 포커스 이동과 안 겹치게
         const idx = tabStates.indexOf(prevTabState);
@@ -5142,6 +5143,8 @@
       await gotoSearchMatch(count);
     } else if (key === 'N' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
       await gotoSearchMatch(-count);
+    } else if (key === '*' || key === '#') {
+      await starSearch(key === '*' ? 1 : -1, true, count);
     } else if (key === ']') {
       await cycleSidebarView(1);
     } else if (key === '[') {
@@ -5302,6 +5305,50 @@
   // 매치 단위로 이동하게 한다 (같은 페이지 매치를 다 돌기 전엔 페이지 이동 안 함).
   function flatSearchMatches() {
     return allSearchResults.flatMap(r => r.rects.map(rect => ({ page: r.page, rect })));
+  }
+
+  // * / # / g* / g# — 선택이 있으면 선택한 텍스트(Neovim 0.10 방식), 없으면 커서 위치의 단어로 검색해
+  // 커서 다음(#은 이전) 일치 항목으로 간다. 결과는 일반 / 검색과 같아서 n/N·기록·하이라이트가 그대로 이어진다.
+  // 단어 경계(\<\>)는 영문 등 한 단어일 때만 — 한글/한자/가나는 조사·어미가 붙어 경계로 찾으면 놓친다.
+  /** @param {number} dir 1(*) | -1(#) @param {boolean} wholeWord @param {number} count */
+  async function starSearch(dir, wholeWord, count) {
+    let text = '', page = -1, rect = null;
+    if (selection) {
+      text = selectionText().trim();
+      page = selection.page;
+      rect = pageCharCache.get(page)?.[Math.min(selection.startIdx, selection.endIdx)]?.rect ?? null;
+    } else if (cursor) {
+      const chars = pageCharCache.get(cursor.page) ?? [];
+      let i = cursor.idx;
+      while (i < chars.length && charClass(chars[i].ch) === 0) i++; // vim처럼 공백 위면 다음 단어
+      if (i < chars.length) {
+        const cls = charClass(chars[i].ch);
+        let lo = i, hi = i;
+        while (lo > 0 && charClass(chars[lo - 1].ch) === cls) lo--;
+        while (hi + 1 < chars.length && charClass(chars[hi + 1].ch) === cls) hi++;
+        text = chars.slice(lo, hi + 1).map(c => c.ch).join('');
+        page = cursor.page;
+        rect = chars[i].rect;
+      }
+    }
+    if (!text) { statusMsg = t('status.star_no_word'); return; }
+    const cjk = /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
+    // 경계 검색만 정규식(\r) — 단어 글자만이라 이스케이프할 게 없다. 나머지는 일반 텍스트 검색이라 그대로
+    const query = wholeWord && !cjk && /^[\p{L}\p{N}_]+$/u.test(text) ? `\\<${text}\\>\\r` : text;
+    searchQuery = query;
+    searchHistory.push(query);
+    await runSearch(query, false);
+    const flat = flatSearchMatches();
+    if (flat.length === 0) return;
+    // 지금 커서가 걸친 일치 항목을 "현재"로 두고 거기서 ±count — 없으면 커서 뒤 첫 항목 직전으로
+    const overlaps = (/** @type {number[]} */ a) => rect && a[0] < rect[2] && rect[0] < a[2] && a[1] < rect[3] && rect[1] < a[3];
+    let cur = flat.findIndex(m => m.page === page && overlaps(m.rect));
+    if (cur === -1) {
+      const after = flat.findIndex(m => m.page > page || (m.page === page && rect && (m.rect[1] > rect[1] || (m.rect[1] === rect[1] && m.rect[0] > rect[0]))));
+      cur = after === -1 ? (dir > 0 ? flat.length - 1 : flat.length) : (dir > 0 ? after - 1 : after);
+    }
+    searchResultIdx = cur;
+    await gotoSearchMatch(dir * count);
   }
 
   async function gotoSearchMatch(dir) {
@@ -5832,7 +5879,8 @@
     }
   }
 
-  async function runSearch(query) {
+  // jump=false면 결과만 채우고 화면/포커스는 안 옮긴다 — * / #가 커서 기준으로 직접 이동하려고 쓴다
+  async function runSearch(query, jump = true) {
     hlsearchOn = true;
     lastSearch = query;
     searchError = '';
@@ -5848,6 +5896,7 @@
         sidebarView = 'search';
         const totalHits = results.reduce((s, r) => s + r.hit_count, 0);
         statusMsg = `/${query}  [${totalHits} hit${totalHits > 1 ? 's' : ''} on ${results.length} page${results.length > 1 ? 's' : ''}]`;
+        if (!jump) return;
         await gotoPage(results[0].page);
         // 검색 직후 바로 j/k로 결과를 훑을 수 있게 사이드바 첫 결과에 포커스 —
         // allSearchResults가 방금 바뀌어서 검색결과 DOM(searchResultEls)이 아직 그
@@ -6925,6 +6974,8 @@
             <table><tbody>
               <tr><td>/ / ⌘F</td><td>{t('shortcuts.search.search_key_desc')}</td></tr>
               <tr><td>n / N</td><td>{t('shortcuts.search.next_prev')}</td></tr>
+              <tr><td>* / #</td><td>{t('shortcuts.search.star')}</td></tr>
+              <tr><td>g* / g#</td><td>{t('shortcuts.search.gstar')}</td></tr>
               <tr><td>...\c / ...\C</td><td>{t('shortcuts.search.case_suffix')}</td></tr>
               <tr><td>...\r / ...\R</td><td>{t('shortcuts.search.regex_suffix')}</td></tr>
               <tr><td>.*</td><td>{t('shortcuts.search.regex_toggle')}</td></tr>

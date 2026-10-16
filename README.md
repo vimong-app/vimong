@@ -156,6 +156,8 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `Cmd+I` | Document info |
 | `/` / `Cmd+F` | Search (Korean/Japanese/Chinese supported) |
 | `n` / `N` | Next / previous match |
+| `*` / `#` | Search forward / backward for the word under the cursor (or the selected text) |
+| `g*` / `g#` | Same, but also match inside words (`cat` → `category`) |
 | `:nohlsearch` / `:noh` | Clear search highlighting |
 
 ### Tabs
