@@ -3950,6 +3950,26 @@
     if (m) { pushJump(); await gotoPageAndY(m.page, m.y); }
   }
 
+  // ── 대문자 마크 (vim의 파일 마크) ── mA는 파일 경로까지 저장하고 'A는 그 파일로 가서 이동한다.
+  // 전역에 26개뿐이라 다른 파일에서 mA를 하면 옮겨간다. { [letter]: { path, page, y } }
+  const GLOBAL_MARKS_KEY = 'vimong-global-marks';
+  function loadGlobalMarks() {
+    try { return JSON.parse(localStorage.getItem(GLOBAL_MARKS_KEY) ?? '{}'); } catch (_) { return {}; }
+  }
+  /** @param {string} letter @param {{path: string, page: number, y: number}} m */
+  function saveGlobalMark(letter, m) {
+    try { localStorage.setItem(GLOBAL_MARKS_KEY, JSON.stringify({ ...loadGlobalMarks(), [letter]: m })); } catch (_) { /* skip */ }
+  }
+  /** @param {string} letter */
+  async function gotoGlobalMark(letter) {
+    const m = loadGlobalMarks()[letter];
+    if (!m) { statusMsg = t('status.mark_not_found', { letter }); return; }
+    if (m.path === filePath) { pushJump(); await gotoPageAndY(m.page, m.y); return; }
+    // 이미 열린 탭이 있으면 newTab이 그 탭으로 전환만 한다. 빈 탭이면 그 자리에 연다(정방향 검색과 같은 규칙)
+    if (filePath) await newTab(m.path); else await openFile(m.path);
+    if (filePath === m.path) await gotoPageAndY(m.page, m.y); // 열기 실패(파일 이동/삭제)면 에러창만 뜨고 끝
+  }
+
   // ── 점프리스트 ── gg/G/nG, 마크, 검색 n/N, 링크, 목차 이동 직전에 pushJump()로 지금 위치를
   // 남기고 Ctrl-o/Ctrl-i로 오간다. 뒤로 간 상태에서 새로 점프하면 앞쪽 기록은 버린다(브라우저 방식) —
   // vim은 안 버리고 중복만 지우지만 문서 뷰어엔 이쪽이 더 예측 가능하다.
@@ -4818,6 +4838,11 @@
         statusMsg = t('status.mark_set', { letter: key }); // 실제로 저장됐는지 눈에 보이게
         return;
       }
+      if (/^[A-Z]$/.test(key) && filePath) {
+        saveGlobalMark(key, { path: filePath, page: currentPage, y: currentPageY() });
+        statusMsg = t('status.mark_set', { letter: key });
+        return;
+      }
     }
 
     // ── '-prefix: '{a-z} 저장해둔 마크로 이동 ──
@@ -4826,6 +4851,10 @@
       if (/^[a-z]$/.test(key)) {
         if (marks[key]) await gotoMark(key);
         else statusMsg = t('status.mark_not_found', { letter: key });
+        return;
+      }
+      if (/^[A-Z]$/.test(key)) {
+        await gotoGlobalMark(key);
         return;
       }
     }
@@ -6693,6 +6722,7 @@
               <tr><td>nG / :n</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
               <tr><td>m{'{a-z}'}</td><td>{t('shortcuts.nav.mark_set')}</td></tr>
               <tr><td>'{'{a-z}'} / `{'{a-z}'}</td><td>{t('shortcuts.nav.mark_goto')}</td></tr>
+              <tr><td>m{'{A-Z}'} / '{'{A-Z}'}</td><td>{t('shortcuts.nav.global_mark')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
