@@ -9,7 +9,7 @@
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { getVersion } from '@tauri-apps/api/app';
   import { SvelteSet, SvelteMap } from 'svelte/reactivity';
-  import { onMount, onDestroy, tick, flushSync } from 'svelte';
+  import { onMount, onDestroy, tick, flushSync, untrack } from 'svelte';
   import { LANGS, LANG_NAMES, loadLangPref, saveLangPref, detectSystemLang, t as t_ } from '$lib/i18n.js';
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
@@ -2083,6 +2083,48 @@
       cursor = { page: cursor.page, idx };
     }
   }
+
+  // v(커서 없을 때) — 지금 화면에 보이는 첫 단어에 커서를 놓는다(마우스 클릭 대신). 좌표상 맨 위가
+  // 아니라 글자 순서상 처음 보이는 글자라 2단 논문이면 왼쪽 단부터. 선택은 시작하지 않는다 — 한 글자가
+  // 선택된 채면 *가 그 한 글자로 검색하니, 검색 이동 직후와 같은 "커서만 있는" 상태로 둔다.
+  async function placeCursorAtViewTop() {
+    if (!filePath || mdMode || hwpMode || !mainEl) return; // 커서 기능이 없는 문서
+    // 커서(캐럿)는 텍스트 선택/하이라이트 도구일 때만 그려진다 — 기본 손 도구면 커서가 놓여도 안 보여서
+    // 아무 반응 없는 것처럼 보였다. 텍스트 선택 도구로 바꾼다(setToolMode가 커서를 지우니 놓기 전에)
+    if (!textSelectMode) setToolMode('text');
+    const page = currentPage;
+    await ensureCharsLoaded(page);
+    const chars = pageCharCache.get(page) ?? [];
+    const el = pageWrapEls[page];
+    // 페이지 위쪽이 화면 위로 스크롤돼 넘어간 만큼(페이지 좌표) — 그보다 아래 글자만 후보
+    const viewTop = el ? Math.max(0, (mainEl.getBoundingClientRect().top - el.getBoundingClientRect().top) / scale) : 0;
+    const pageW = pageSizes[page]?.[0] ?? Infinity;
+    const idx = chars.findIndex(c => charClass(c.ch) !== 0 && isRealChar(c, pageW) && c.rect[1] >= viewTop);
+    if (idx === -1) { statusMsg = t('status.caret_no_text'); return; }
+    anchorIdx = idx;
+    cursor = { page, idx };
+    visualMode = false;
+  }
+
+  // 커서가 화면 밖으로 나가면 따라 스크롤 — v·w/b/e·h/l·검색 등 커서를 옮기는 모든 경로 공통.
+  // 커서만 의존한다(untrack) — 배율/레이아웃이 바뀔 때마다 커서로 끌려가면 안 되니까.
+  // 회전된 페이지는 글자 좌표가 회전 전 기준이라(커서 오버레이도 안 그림) 건너뛴다.
+  $effect(() => {
+    const cur = cursor;
+    if (!cur) return;
+    untrack(() => {
+      const c = pageCharCache.get(cur.page)?.[cur.idx];
+      const el = pageWrapEls[cur.page];
+      if (!c || !el || !mainEl || getPageRotation(cur.page) !== 0) return;
+      const p = el.getBoundingClientRect(), m = mainEl.getBoundingClientRect();
+      const top = p.top + c.rect[1] * scale, bottom = p.top + c.rect[3] * scale;
+      const left = p.left + c.rect[0] * scale, right = p.left + c.rect[2] * scale;
+      const M = 40; // 가장자리에 딱 붙지 않게 여유
+      const dy = top < m.top ? top - m.top - M : bottom > m.bottom ? bottom - m.bottom + M : 0;
+      const dx = left < m.left ? left - m.left - M : right > m.right ? right - m.right + M : 0;
+      if (dy || dx) mainEl.scrollBy(dx, dy);
+    });
+  });
 
   // 커서가 있을 때 h/l로 한 글자씩 이동 — dir: -1(왼쪽/뒤) | 1(오른쪽/앞)
   function charMotion(dir) {
@@ -5169,6 +5211,8 @@
     } else if (key === 'v' && cursor) {
       visualMode = !visualMode;
       anchorIdx = cursor.idx; // 켜질 땐 지금 위치를 anchor로 고정, 꺼질 땐 선택을 캐럿으로 접음
+    } else if (key === 'v') {
+      await placeCursorAtViewTop();
     } else if ((key === 'y' || key === 'Y') && selection) {
       await copySelection();
     }
@@ -6974,6 +7018,7 @@
             <table><tbody>
               <tr><td>/ / ⌘F</td><td>{t('shortcuts.search.search_key_desc')}</td></tr>
               <tr><td>n / N</td><td>{t('shortcuts.search.next_prev')}</td></tr>
+              <tr><td>v</td><td>{t('shortcuts.search.caret')}</td></tr>
               <tr><td>* / #</td><td>{t('shortcuts.search.star')}</td></tr>
               <tr><td>g* / g#</td><td>{t('shortcuts.search.gstar')}</td></tr>
               <tr><td>...\c / ...\C</td><td>{t('shortcuts.search.case_suffix')}</td></tr>
