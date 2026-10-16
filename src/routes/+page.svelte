@@ -1800,6 +1800,8 @@
         resetMainViewState();
         await renderCurrentView();
       }
+      // 우리가 쓴 변경을 바깥 변경으로 보고 자동 리로드하지 않게 mtime을 새로 맞춘다
+      if (isCurrentTab) currentFileMtime = await invoke('get_file_mtime', { path: filePath }).catch(() => currentFileMtime);
       statusMsg = t('status.saved', { label });
     } catch (e) {
       statusMsg = `Error: ${e}`;
@@ -3273,6 +3275,8 @@
   });
 
   onMount(async () => {
+    const reloadTimer = setInterval(checkFileChanged, 1000);
+    unlistenFns.push(() => clearInterval(reloadTimer));
     const savedWidth = parseInt(localStorage.getItem('vimong-sidebar-width'), 10);
     if (!isNaN(savedWidth)) sidebarWidth = Math.max(SIDEBAR_MIN, Math.min(SIDEBAR_MAX, savedWidth));
 
@@ -3641,6 +3645,42 @@
       if (resumePage > 0 && resumePage < count) await gotoPage(resumePage);
     } catch (e) {
       await showOpenFileError(path, e);
+    }
+  }
+
+  // ── 자동 리로드 ── 열린 파일이 밖에서 바뀌면(LaTeX 재컴파일 등) 같은 위치·배율로 다시 연다.
+  // ponytail: get_file_mtime(초 단위) 1초 폴링, 현재 탭만 — 컴파일 도중 반쯤 쓴 파일을 피하려고
+  // 바뀐 mtime이 두 번 연속 같을 때만 연다. 더 빨라야 하면 Rust notify 크레이트로 바꿀 것.
+  // hwp/마크다운은 위치 복원 경로가 달라 일단 제외.
+  let seenMtime = 0;
+  let reloading = false;
+  async function checkFileChanged() {
+    if (!filePath || !currentFileMtime || hwpMode || mdMode || reloading || mode !== 'normal') return;
+    const path = filePath;
+    const m = await invoke('get_file_mtime', { path }).catch(() => 0);
+    if (path !== filePath || !m || m === currentFileMtime) { seenMtime = 0; return; }
+    if (m !== seenMtime) { seenMtime = m; return; } // 아직 쓰는 중일 수 있으니 한 번 더 본다
+    seenMtime = 0;
+    // :w 안 한 하이라이트가 있으면 다시 열면 날아가니 열지 않고 알리기만 한다(같은 변경으로 반복 경고 안 함)
+    if (await invoke('is_tab_dirty', { idx: currentTabIdx })) {
+      currentFileMtime = m;
+      statusMsg = t('status.reload_skipped_dirty');
+      return;
+    }
+    reloading = true;
+    try {
+      const pos = { page: currentPage, y: currentPageY() };
+      const keep = { scale, marks, jumps, jumpIdx };
+      const before = currentFileMtime;
+      await openFile(path);
+      // 열기 실패(깨진 파일 등) — 같은 변경으로 매번 에러창을 다시 띄우지 않게 이번 mtime은 넘긴다
+      if (currentFileMtime === before) { currentFileMtime = m; return; }
+      ({ marks, jumps, jumpIdx } = keep);
+      if (scale !== keep.scale) { scale = keep.scale; triggerRerender(); }
+      await gotoPageAndY(Math.min(pos.page, pageCount - 1), pos.y);
+      statusMsg = t('status.reloaded', { name: baseName(path) });
+    } finally {
+      reloading = false;
     }
   }
 
