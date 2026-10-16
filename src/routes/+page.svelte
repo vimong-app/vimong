@@ -687,7 +687,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = loadMarks(path); jumps = []; jumpIdx = 0;
+      marks = loadMarks(path);
       try { toc = buildHwpToc(JSON.parse(hwpDoc.getStructure('auto')).roots); } catch (_) { toc = []; }
       collapsed = collectParentIds(toc, '', new SvelteSet());
       sidebarView = tocIsMeaningful ? 'toc' : 'thumbs';
@@ -736,7 +736,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = loadMarks(path); jumps = []; jumpIdx = 0;
+      marks = loadMarks(path);
       mdSearchResults = [];
       toc = buildMdToc(mdSource);
       collapsed = collectParentIds(toc, '', new SvelteSet()); // PDF/HWP처럼 챕터(최상위)만 펼친 채 시작
@@ -2820,8 +2820,9 @@
                              // 반복해서 눌러도(PDF 뷰어 관례) 매번 z를 다시 안 눌러도 되게 한다
   let zUsed = false;        // 이번 z 누름으로 z-명령을 이미 실행했는지 — keyup에서 프리픽스 정리 여부 판단
   let marks = {};           // m{a-z}로 저장한 위치 — { [letter]: { page, y } }, 탭별로 저장/복원
-  /** @type {{page: number, y: number}[]} */
-  let jumps = [];           // 점프리스트(Ctrl-o/Ctrl-i) — 큰 이동 직전 위치 { page, y }, 탭별로 저장/복원
+  /** @type {{path: string, page: number, y: number}[]} */
+  let jumps = [];           // 점프리스트(Ctrl-o/Ctrl-i) — 큰 이동 직전 위치 { path, page, y }. 파일을 넘나들어야
+                            // 해서 탭별이 아니라 앱 전체에 하나다
   let jumpIdx = 0;          // jumps 안의 현재 위치 — jumps.length면 "목록 끝(최신)"
   let lastSearch = '';
   let searchResultIdx = $state(0);  // current index in flatSearchMatches()
@@ -2838,7 +2839,7 @@
       hwpMode: false, hwpPages: [], hwpDoc: null, hwpFileBytes: 0, currentFileMtime: 0,
       mdMode: false, mdSource: '', mdSearchResults: [], mdScale: 1.0,
       epubReflowable: false, epubFontSize,
-      marks: {}, jumps: [], jumpIdx: 0,
+      marks: {},
     };
   }
 
@@ -2855,7 +2856,7 @@
       hwpMode, hwpPages, hwpDoc, hwpFileBytes, currentFileMtime,
       mdMode, mdSource, mdSearchResults, mdScale,
       epubReflowable, epubFontSize,
-      marks, jumps, jumpIdx,
+      marks,
     };
   }
 
@@ -2877,7 +2878,7 @@
     epubReflowable = s.epubReflowable ?? false;
     epubFontSize = s.epubFontSize ?? DEFAULT_EPUB_EM;
     currentFileMtime = s.currentFileMtime ?? 0;
-    marks = s.marks ?? {}; jumps = s.jumps ?? []; jumpIdx = s.jumpIdx ?? 0;
+    marks = s.marks ?? {};
     collapsed = collectParentIds(s.toc, '', new SvelteSet());
     selectedTocId = null;
     // PNG 캐시(Blob URL)를 안 쓰기로 하면서 탭별 렌더 결과도 안 들고 있는다 —
@@ -3003,7 +3004,7 @@
     hwpMode = false; hwpPages = []; hwpDoc = null;
     mdMode = false; mdSource = ''; mdScale = 1.0;
     epubReflowable = false;
-    marks = {}; jumps = []; jumpIdx = 0;
+    marks = {};
     if (path) {
       await openFile(path);
       // openFile은 실패해도 내부에서 에러를 삼키므로(다이얼로그만 띄움) filePath로 성공 여부 판단
@@ -3650,7 +3651,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = loadMarks(path); jumps = []; jumpIdx = 0;
+      marks = loadMarks(path);
       toc = await invoke('get_toc');
       collapsed = collectParentIds(toc, '', new SvelteSet()); // 챕터만 보이게 하위 항목은 기본 접힌 채로 시작
       layers = await invoke('get_optional_content_groups');
@@ -3703,12 +3704,12 @@
     reloading = true;
     try {
       const pos = { page: currentPage, y: currentPageY() };
-      const keep = { scale, marks, jumps, jumpIdx };
+      const keep = { scale, marks };
       const before = currentFileMtime;
       await openFile(path);
       // 열기 실패(깨진 파일 등) — 같은 변경으로 매번 에러창을 다시 띄우지 않게 이번 mtime은 넘긴다
       if (currentFileMtime === before) { currentFileMtime = m; return; }
-      ({ marks, jumps, jumpIdx } = keep);
+      marks = keep.marks;
       if (scale !== keep.scale) { scale = keep.scale; triggerRerender(); }
       await gotoPageAndY(Math.min(pos.page, pageCount - 1), pos.y);
       statusMsg = t('status.reloaded', { name: baseName(path) });
@@ -3964,35 +3965,49 @@
   async function gotoGlobalMark(letter) {
     const m = loadGlobalMarks()[letter];
     if (!m) { statusMsg = t('status.mark_not_found', { letter }); return; }
-    if (m.path === filePath) { pushJump(); await gotoPageAndY(m.page, m.y); return; }
-    // 이미 열린 탭이 있으면 newTab이 그 탭으로 전환만 한다. 빈 탭이면 그 자리에 연다(정방향 검색과 같은 규칙)
-    if (filePath) await newTab(m.path); else await openFile(m.path);
-    if (filePath === m.path) await gotoPageAndY(m.page, m.y); // 열기 실패(파일 이동/삭제)면 에러창만 뜨고 끝
+    pushJump();
+    await gotoFilePos(m);
+  }
+
+  // 파일+위치로 이동 — 다른 파일이면 이미 열린 탭이 있을 때 newTab이 그 탭으로 전환만 하고,
+  // 빈 탭이면 그 자리에 연다(정방향 검색과 같은 규칙). 파일 마크와 점프리스트가 공유한다.
+  /** @param {{path: string, page: number, y: number}} m */
+  async function gotoFilePos(m) {
+    if (m.path !== filePath) {
+      if (filePath) await newTab(m.path); else await openFile(m.path);
+      if (filePath !== m.path) return; // 열기 실패(파일 이동/삭제)면 에러창만 뜨고 끝
+    }
+    await gotoPageAndY(m.page, m.y);
   }
 
   // ── 점프리스트 ── gg/G/nG, 마크, 검색 n/N, 링크, 목차 이동 직전에 pushJump()로 지금 위치를
   // 남기고 Ctrl-o/Ctrl-i로 오간다. 뒤로 간 상태에서 새로 점프하면 앞쪽 기록은 버린다(브라우저 방식) —
   // vim은 안 버리고 중복만 지우지만 문서 뷰어엔 이쪽이 더 예측 가능하다.
+  // 마크다운은 페이지 위치 개념이 없어 기록하지 않는다(거기서 Ctrl-o로 다른 파일로 나가는 건 된다).
+  function herePos() {
+    return filePath && !mdMode ? { path: filePath, page: currentPage, y: currentPageY() } : null;
+  }
+
   function pushJump() {
-    if (!filePath || mdMode) return;
+    const pos = herePos();
+    if (!pos) return;
     jumps.splice(jumpIdx);
-    jumps.push({ page: currentPage, y: currentPageY() });
+    jumps.push(pos);
     if (jumps.length > 100) jumps.shift();
     jumpIdx = jumps.length;
   }
 
   async function jumpBack() {
-    if (mdMode || jumpIdx === 0) return;
+    if (jumpIdx === 0) return;
     // 목록 끝에서 처음 뒤로 갈 땐 지금 위치도 남겨둬야 Ctrl-i로 돌아올 수 있다
-    if (jumpIdx === jumps.length) jumps.push({ page: currentPage, y: currentPageY() });
-    const j = jumps[--jumpIdx];
-    await gotoPageAndY(j.page, j.y);
+    const pos = jumpIdx === jumps.length ? herePos() : null;
+    if (pos) jumps.push(pos);
+    await gotoFilePos(jumps[--jumpIdx]);
   }
 
   async function jumpForward() {
-    if (mdMode || jumpIdx >= jumps.length - 1) return;
-    const j = jumps[++jumpIdx];
-    await gotoPageAndY(j.page, j.y);
+    if (jumpIdx >= jumps.length - 1) return;
+    await gotoFilePos(jumps[++jumpIdx]);
   }
 
   // 사이드바 항목 목록(els)에서 idx번째로 포커스를 옮기고 보이게 스크롤 — 썸네일/목차/
