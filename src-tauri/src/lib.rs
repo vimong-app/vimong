@@ -401,6 +401,18 @@ fn is_tab_dirty(idx: usize, state: State<Mutex<AppState>>) -> bool {
     state.lock().unwrap().tabs.get(idx).is_some_and(|t| t.dirty)
 }
 
+// 프론트엔드가 새로 마운트될 때(개발 모드 HMR, macOS 전체화면 전환 리마운트) 탭 목록은 프론트에서
+// 한 개로 초기화되는데 여기 tabs는 그대로 남아 인덱스가 어긋난다 — 그 뒤 new_tab이 돌려주는 인덱스가
+// 프론트 배열 길이를 넘어 빈 탭(배열 구멍)이 생기고 클릭해도 안 열린다. 마운트 시 한 개로 맞춘다.
+#[tauri::command]
+fn reset_tabs(app: tauri::AppHandle, state: State<Mutex<AppState>>) {
+    let mut s = state.lock().unwrap();
+    s.tabs = vec![PdfDoc::empty()];
+    s.current = 0;
+    drop(s);
+    update_tab_menu_enabled(&app, 1);
+}
+
 #[tauri::command]
 fn close_tab(app: tauri::AppHandle, idx: usize, state: State<Mutex<AppState>>) -> Result<usize, String> {
     let mut s = state.lock().unwrap();
@@ -5380,6 +5392,7 @@ pub fn run() {
             toggle_optional_content,
             get_attachments,
             new_tab,
+            reset_tabs,
             close_tab,
             is_tab_dirty,
             switch_tab,

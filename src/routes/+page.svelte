@@ -2894,7 +2894,21 @@
     // 래스터화가 이제 가벼워서(PNG 인코딩 없음) 전환할 때마다 다시 그려도 충분히 빠르다
   }
 
-  async function switchToTab(idx) {
+  // ── 탭 작업 직렬화 ── 탭 전환/생성/닫기는 await가 여러 번 끼는 비동기라, 끝나기 전에 또 시작되면
+  // (Ctrl-o/'A/gt 연타·키 반복, 탭 연타, 자동 리로드 타이머) 두 흐름이 currentTabIdx·tabStates·
+  // tabLabels를 번갈아 고쳐 Rust 쪽 탭 목록과 어긋난다 — 범위 밖 인덱스에 라벨을 쓰면 배열에 구멍이
+  // 생겨 빈 탭이 보이고, 그 탭은 switch_tab이 거부해 클릭해도 안 열린다. 진행 중엔 tabBusy>0이고
+  // 사용자 입력(키·탭바·메뉴)과 리로드 타이머는 그동안 무시한다. 중첩 호출은 카운터라 문제없다.
+  let tabBusy = 0;
+  /** @template T @param {() => Promise<T>} fn @returns {Promise<T>} */
+  async function withTabBusy(fn) {
+    tabBusy++;
+    try { return await fn(); } finally { tabBusy--; }
+  }
+
+  /** @param {number} idx */
+  function switchToTab(idx) { return withTabBusy(() => switchToTabInner(idx)); }
+  async function switchToTabInner(idx) {
     idx = Math.max(0, Math.min(idx, tabLabels.length - 1));
     if (idx === currentTabIdx) return;
     hintMode = false; pageLinks = [];
@@ -2986,7 +3000,9 @@
     return -1;
   }
 
-  async function newTab(path = null) {
+  /** @param {string | null} [path] */
+  function newTab(path = null) { return withTabBusy(() => newTabInner(path)); }
+  async function newTabInner(path) {
     if (path) {
       const existing = findOpenTab(path);
       if (existing !== -1) { await switchToTab(existing); return; }
@@ -3046,7 +3062,9 @@
     await closeTabConfirmed(idx);
   }
 
-  async function closeTabConfirmed(idx) {
+  /** @param {number} idx */
+  function closeTabConfirmed(idx) { return withTabBusy(() => closeTabConfirmedInner(idx)); }
+  async function closeTabConfirmedInner(idx) {
     // newTab()과 같은 이유(Cmd+W도 네이티브 메뉴 단축키) — mode 스택 문제
     mode = 'normal';
     hintMode = false; pageLinks = [];
@@ -3353,6 +3371,9 @@
       if (focused && mode !== 'command' && mode !== 'search') reclaimFocus();
     }));
 
+    // 프론트 탭 상태는 방금 한 개로 새로 시작했으니 Rust 쪽 탭 목록도 맞춘다(reset_tabs 주석 참고) —
+    // 리마운트 때 남아 있던 Rust 탭과 인덱스가 어긋나 빈 탭이 생기던 문제
+    await invoke('reset_tabs');
     // Restore file after remount (window resize / fullscreen toggle on macOS)
     const saved = sessionStorage.getItem('vimong-file');
     if (saved) {
@@ -3386,6 +3407,7 @@
     bootLoading = false;
 
     unlistenFns.push(await listen('menu', async (e) => {
+      if (tabBusy > 0 && ['new-tab', 'close-tab', 'next-tab', 'prev-tab', 'reopen-closed-tab'].includes(e.payload)) return;
       switch (e.payload) {
         case 'new-tab':
           // close-tab과 같은 이유(Cmd+T도 네이티브 메뉴 단축키라 JS keydown에서 못 막는다) —
@@ -3698,7 +3720,7 @@
   let seenMtime = 0;
   let reloading = false;
   async function checkFileChanged() {
-    if (!filePath || !currentFileMtime || hwpMode || reloading || mode !== 'normal') return;
+    if (!filePath || !currentFileMtime || hwpMode || reloading || tabBusy > 0 || mode !== 'normal') return;
     const path = filePath;
     const m = await invoke('get_file_mtime', { path }).catch(() => 0);
     if (path !== filePath || !m || m === currentFileMtime) { seenMtime = 0; return; }
@@ -3710,6 +3732,7 @@
       statusMsg = t('status.reload_skipped_dirty');
       return;
     }
+    if (path !== filePath || tabBusy > 0) return; // 위 await 사이에 탭이 바뀌었으면 엉뚱한 탭에 열지 않게
     if (mdMode) { await reloadMarkdown(path, m); return; }
     reloading = true;
     try {
@@ -4489,6 +4512,8 @@
   // ── Key handling ───────────────────────────────────────────
   async function handleKeydown(e) {
     const key = e.key;
+    // 탭 작업 중엔 무시(위 tabBusy 참고) — 열면서 뜨는 암호 입력창의 Escape만 통과
+    if (tabBusy > 0 && !showPasswordPrompt) return;
     if (mode === 'command' || mode === 'search') return; // <input>이 직접 처리
     // 폼 필드(텍스트/콤보박스/리스트박스)는 페이지 위에 얹은 실제 <input>/<textarea>/<select>라
     // notePending 같은 상태 플래그가 따로 없다 — 지금 포커스가 그 안에 있으면 타이핑이 vim
@@ -5866,14 +5891,14 @@
       title={(i === currentTabIdx ? filePath : tabStates[i]?.filePath) || label}
       role="button"
       tabindex="-1"
-      onclick={() => { if (!dragTabMoved) switchToTab(i); }}
+      onclick={() => { if (!dragTabMoved && !tabBusy) switchToTab(i); }}
       onkeydown={(e) => e.key === 'Enter' && switchToTab(i)}
       onpointerdown={(e) => startTabDrag(e, i)}
     >
       <span class="tabbar-tab-name">{label}</span>
       <button
         class="tabbar-close"
-        onclick={(e) => { e.stopPropagation(); closeTab(i); }}
+        onclick={(e) => { e.stopPropagation(); if (!tabBusy) closeTab(i); }}
         tabindex="-1"
       >×</button>
     </div>
