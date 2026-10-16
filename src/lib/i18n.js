@@ -134,6 +134,7 @@ const DICT = {
   'shortcuts.nav.half_page': { ko: '반 페이지 아래/위로 스크롤', en: 'Scroll half page down/up', ja: '半ページ下/上へスクロール', 'zh-hans': '向下/向上滚动半页', 'zh-hant': '向下/向上捲動半頁', es: 'Desplazar media página abajo/arriba' },
   'shortcuts.nav.mark_set': { ko: '현재 위치를 마크로 저장', en: 'Save current position as a mark', ja: '現在位置をマークとして保存', 'zh-hans': '将当前位置保存为标记', 'zh-hant': '將目前位置儲存為標記', es: 'Guardar la posición actual como marca' },
   'shortcuts.nav.mark_goto': { ko: '저장한 마크로 이동', en: 'Jump to a saved mark', ja: '保存したマークへ移動', 'zh-hans': '跳转到已保存的标记', 'zh-hant': '跳至已儲存的標記', es: 'Ir a una marca guardada' },
+  'shortcuts.nav.jump_back_forward': { ko: '이전 / 다음 점프 위치로 이동', en: 'Jump to older / newer position', ja: '前 / 次のジャンプ位置へ移動', 'zh-hans': '跳转到上一个 / 下一个位置', 'zh-hant': '跳至上一個 / 下一個位置', es: 'Ir a la posición de salto anterior / siguiente' },
   'shortcuts.nav.highlight': { ko: '선택한 텍스트를 형광펜으로 하이라이트', en: 'Highlight the selected text', ja: '選択したテキストをハイライト', 'zh-hans': '为选中文字加上荧光笔标记', 'zh-hant': '為選取文字加上螢光筆標記', es: 'Resaltar el texto seleccionado' },
   'shortcuts.nav.undo_highlight': { ko: '가장 최근 하이라이트 실행 취소', en: 'Undo the most recent highlight', ja: '直近のハイライトを元に戻す', 'zh-hans': '撤销最近添加的荧光笔标记', 'zh-hant': '復原最近新增的螢光筆標記', es: 'Deshacer el resaltado más reciente' },
   'shortcuts.nav.next_prev_page': { ko: '다음 / 이전 페이지', en: 'Next / previous page', ja: '次のページ / 前のページ', 'zh-hans': '下一页 / 上一页', 'zh-hant': '下一頁 / 上一頁', es: 'Página siguiente / anterior' },

@@ -122,6 +122,7 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 | `nG` | Go to page n (e.g. `5G`) |
 | `m{a-z}` | Save current position as a mark |
 | `'{a-z}` / `` `{a-z}`` | Jump to a saved mark |
+| `Ctrl+O` / `Ctrl+I` | Jump to older / newer position |
 | `f` | Show link hints, then jump |
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
 | `p` | Presentation mode (fullscreen slideshow) |

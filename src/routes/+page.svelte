@@ -654,7 +654,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {};
+      marks = {}; jumps = []; jumpIdx = 0;
       try { toc = buildHwpToc(JSON.parse(hwpDoc.getStructure('auto')).roots); } catch (_) { toc = []; }
       collapsed = collectParentIds(toc, '', new SvelteSet());
       sidebarView = tocIsMeaningful ? 'toc' : 'thumbs';
@@ -703,7 +703,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {};
+      marks = {}; jumps = []; jumpIdx = 0;
       mdSearchResults = [];
       toc = buildMdToc(mdSource);
       collapsed = collectParentIds(toc, '', new SvelteSet()); // PDF/HWP처럼 챕터(최상위)만 펼친 채 시작
@@ -2785,6 +2785,9 @@
                              // 반복해서 눌러도(PDF 뷰어 관례) 매번 z를 다시 안 눌러도 되게 한다
   let zUsed = false;        // 이번 z 누름으로 z-명령을 이미 실행했는지 — keyup에서 프리픽스 정리 여부 판단
   let marks = {};           // m{a-z}로 저장한 위치 — { [letter]: { page, y } }, 탭별로 저장/복원
+  /** @type {{page: number, y: number}[]} */
+  let jumps = [];           // 점프리스트(Ctrl-o/Ctrl-i) — 큰 이동 직전 위치 { page, y }, 탭별로 저장/복원
+  let jumpIdx = 0;          // jumps 안의 현재 위치 — jumps.length면 "목록 끝(최신)"
   let lastSearch = '';
   let searchResultIdx = $state(0);  // current index in flatSearchMatches()
   let thumbVersion = 0;     // cancel old thumbnail loads on new file (global across tabs)
@@ -2800,7 +2803,7 @@
       hwpMode: false, hwpPages: [], hwpDoc: null, hwpFileBytes: 0, currentFileMtime: 0,
       mdMode: false, mdSource: '', mdSearchResults: [], mdScale: 1.0,
       epubReflowable: false, epubFontSize,
-      marks: {},
+      marks: {}, jumps: [], jumpIdx: 0,
     };
   }
 
@@ -2817,7 +2820,7 @@
       hwpMode, hwpPages, hwpDoc, hwpFileBytes, currentFileMtime,
       mdMode, mdSource, mdSearchResults, mdScale,
       epubReflowable, epubFontSize,
-      marks,
+      marks, jumps, jumpIdx,
     };
   }
 
@@ -2839,7 +2842,7 @@
     epubReflowable = s.epubReflowable ?? false;
     epubFontSize = s.epubFontSize ?? DEFAULT_EPUB_EM;
     currentFileMtime = s.currentFileMtime ?? 0;
-    marks = s.marks ?? {};
+    marks = s.marks ?? {}; jumps = s.jumps ?? []; jumpIdx = s.jumpIdx ?? 0;
     collapsed = collectParentIds(s.toc, '', new SvelteSet());
     selectedTocId = null;
     // PNG 캐시(Blob URL)를 안 쓰기로 하면서 탭별 렌더 결과도 안 들고 있는다 —
@@ -2965,7 +2968,7 @@
     hwpMode = false; hwpPages = []; hwpDoc = null;
     mdMode = false; mdSource = ''; mdScale = 1.0;
     epubReflowable = false;
-    marks = {};
+    marks = {}; jumps = []; jumpIdx = 0;
     if (path) {
       await openFile(path);
       // openFile은 실패해도 내부에서 에러를 삼키므로(다이얼로그만 띄움) filePath로 성공 여부 판단
@@ -3610,7 +3613,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {};
+      marks = {}; jumps = []; jumpIdx = 0;
       toc = await invoke('get_toc');
       collapsed = collectParentIds(toc, '', new SvelteSet()); // 챕터만 보이게 하위 항목은 기본 접힌 채로 시작
       layers = await invoke('get_optional_content_groups');
@@ -3859,6 +3862,7 @@
     if (mdMode) { selectedTocId = item.id; mdComponentRef?.scrollToOffset(item.mdOffset, item.mdAnchor); return; }
     if (item.page === null) return;
     selectedTocId = item.id;
+    pushJump();
     await gotoPageAndY(item.page, item.y);
   }
 
@@ -3870,7 +3874,32 @@
 
   async function gotoMark(letter) {
     const m = marks[letter];
-    if (m) await gotoPageAndY(m.page, m.y);
+    if (m) { pushJump(); await gotoPageAndY(m.page, m.y); }
+  }
+
+  // ── 점프리스트 ── gg/G/nG, 마크, 검색 n/N, 링크, 목차 이동 직전에 pushJump()로 지금 위치를
+  // 남기고 Ctrl-o/Ctrl-i로 오간다. 뒤로 간 상태에서 새로 점프하면 앞쪽 기록은 버린다(브라우저 방식) —
+  // vim은 안 버리고 중복만 지우지만 문서 뷰어엔 이쪽이 더 예측 가능하다.
+  function pushJump() {
+    if (!filePath || mdMode) return;
+    jumps.splice(jumpIdx);
+    jumps.push({ page: currentPage, y: currentPageY() });
+    if (jumps.length > 100) jumps.shift();
+    jumpIdx = jumps.length;
+  }
+
+  async function jumpBack() {
+    if (mdMode || jumpIdx === 0) return;
+    // 목록 끝에서 처음 뒤로 갈 땐 지금 위치도 남겨둬야 Ctrl-i로 돌아올 수 있다
+    if (jumpIdx === jumps.length) jumps.push({ page: currentPage, y: currentPageY() });
+    const j = jumps[--jumpIdx];
+    await gotoPageAndY(j.page, j.y);
+  }
+
+  async function jumpForward() {
+    if (mdMode || jumpIdx >= jumps.length - 1) return;
+    const j = jumps[++jumpIdx];
+    await gotoPageAndY(j.page, j.y);
   }
 
   // 사이드바 항목 목록(els)에서 idx번째로 포커스를 옮기고 보이게 스크롤 — 썸네일/목차/
@@ -4128,6 +4157,7 @@
     hintMode = false;
     pageLinks = [];
     if (link.page !== null && link.page !== undefined) {
+      pushJump();
       await gotoPageAndY(link.page, link.y);
     } else if (link.uri && !link.uri.startsWith('#')) {
       await openUrl(link.uri);
@@ -4689,7 +4719,7 @@
     if (pendingPrefix === 'g') {
       pendingPrefix = '';
       const savedN = pendingN; pendingN = null;
-      if (key === 'g') { if (mdMode) mdComponentRef?.scrollToTop(); else await gotoPage(0); return; }
+      if (key === 'g') { if (mdMode) mdComponentRef?.scrollToTop(); else { pushJump(); await gotoPage(0); } return; }
       if (key === 'a') { showCharValue(); return; }
       // gc/gp/gs — 마크다운 코드/미리보기/분할 뷰 전환 (:md 명령과 동일, 마크다운 문서에서만 동작)
       if (mdMode && key === 'c') { setMdViewMode('code'); return; }
@@ -4768,6 +4798,12 @@
       if (mdMode) mdComponentRef?.scrollByX(-60);
       else if (cursor) charMotion(-1);
       else mainEl.scrollBy(-60, 0);
+    } else if (e.ctrlKey && !e.metaKey && key === 'o') {
+      e.preventDefault(); // Cmd+O(파일 열기)와 안 겹치게 Ctrl만 받는다
+      await jumpBack();
+    } else if (e.ctrlKey && !e.metaKey && key === 'i') {
+      e.preventDefault(); // Cmd+I(문서 정보)와 안 겹치게 Ctrl만 받는다
+      await jumpForward();
     } else if ((e.ctrlKey || e.metaKey) && key === 'd') {
       e.preventDefault(); // 브라우저 기본 단축키(북마크 등)와 겹치니 확실히 막는다
       if (mdMode) { mdComponentRef?.halfPageScrollBy(1); }
@@ -4814,8 +4850,7 @@
       await togglePresentation();
     } else if (key === 'G') {
       if (mdMode) mdComponentRef?.scrollToBottom();
-      else if (n !== null) await gotoPage(n - 1);
-      else            await gotoPage(pageCount - 1);
+      else { pushJump(); await gotoPage(n !== null ? n - 1 : pageCount - 1); }
     } else if (key === 'g') {
       pendingN = n; pendingPrefix = 'g';
     } else if (key === 'z') {
@@ -5018,6 +5053,7 @@
     const flat = flatSearchMatches();
     if (flat.length === 0) return;
     hlsearchOn = true;
+    pushJump();
     searchResultIdx = (searchResultIdx + dir + flat.length) % flat.length;
     const m = flat[searchResultIdx];
     if (m.page !== currentPage) await gotoPage(m.page);
@@ -6568,6 +6604,7 @@
               <tr><td>nG</td><td>{t('shortcuts.nav.goto_page')}</td></tr>
               <tr><td>m{'{a-z}'}</td><td>{t('shortcuts.nav.mark_set')}</td></tr>
               <tr><td>'{'{a-z}'} / `{'{a-z}'}</td><td>{t('shortcuts.nav.mark_goto')}</td></tr>
+              <tr><td>Ctrl+O / Ctrl+I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
               <tr><td>u / ⌘Z</td><td>{t('shortcuts.nav.undo_highlight')}</td></tr>
