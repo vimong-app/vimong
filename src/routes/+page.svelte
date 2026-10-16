@@ -438,6 +438,25 @@
   $effect(() => {
     if (filePath && pageCount > 0) saveLastPage(filePath, currentPage, currentFileMtime);
   });
+
+  // ── 소문자 마크 파일별 저장 (vim viminfo의 '100과 같은 역할) ── { [path]: { [letter]: {page, y} } }
+  // 마지막 페이지와 달리 mtime은 안 본다 — LaTeX 재컴파일처럼 같은 문서가 고쳐져도 마크는 남아야
+  // 하고, 페이지 수가 줄었으면 gotoPage가 범위로 잘라준다. 최근 100개 파일만 남긴다.
+  const MARKS_KEY = 'vimong-marks';
+  /** @param {string | null} path */
+  function loadMarks(path) {
+    try { return path && JSON.parse(localStorage.getItem(MARKS_KEY) ?? '{}')[path] || {}; } catch (_) { return {}; }
+  }
+  /** @param {string} path @param {object} m */
+  function saveMarks(path, m) {
+    try {
+      const map = JSON.parse(localStorage.getItem(MARKS_KEY)) ?? {};
+      delete map[path]; // 지웠다 다시 넣어 키 순서상 맨 뒤(최신)로 — 오래된 것부터 잘라낸다
+      map[path] = m;
+      for (const k of Object.keys(map).slice(0, -100)) delete map[k];
+      localStorage.setItem(MARKS_KEY, JSON.stringify(map));
+    } catch (_) { /* skip */ }
+  }
   // MCP 서버(vimong --mcp)가 "지금 보고 있는 페이지"와 선택한 텍스트를 알 수 있게 Rust 쪽에 알린다.
   // hwp는 MuPDF로 못 여니 제외.
   $effect(() => {
@@ -668,7 +687,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {}; jumps = []; jumpIdx = 0;
+      marks = loadMarks(path); jumps = []; jumpIdx = 0;
       try { toc = buildHwpToc(JSON.parse(hwpDoc.getStructure('auto')).roots); } catch (_) { toc = []; }
       collapsed = collectParentIds(toc, '', new SvelteSet());
       sidebarView = tocIsMeaningful ? 'toc' : 'thumbs';
@@ -717,7 +736,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {}; jumps = []; jumpIdx = 0;
+      marks = loadMarks(path); jumps = []; jumpIdx = 0;
       mdSearchResults = [];
       toc = buildMdToc(mdSource);
       collapsed = collectParentIds(toc, '', new SvelteSet()); // PDF/HWP처럼 챕터(최상위)만 펼친 채 시작
@@ -3631,7 +3650,7 @@
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
       selectedTocId = null;
-      marks = {}; jumps = []; jumpIdx = 0;
+      marks = loadMarks(path); jumps = []; jumpIdx = 0;
       toc = await invoke('get_toc');
       collapsed = collectParentIds(toc, '', new SvelteSet()); // 챕터만 보이게 하위 항목은 기본 접힌 채로 시작
       layers = await invoke('get_optional_content_groups');
@@ -4795,6 +4814,7 @@
       pendingPrefix = '';
       if (/^[a-z]$/.test(key)) {
         marks[key] = { page: currentPage, y: currentPageY() };
+        if (filePath) saveMarks(filePath, marks);
         statusMsg = t('status.mark_set', { letter: key }); // 실제로 저장됐는지 눈에 보이게
         return;
       }

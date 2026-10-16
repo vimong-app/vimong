@@ -120,7 +120,7 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 | `J` / `K` | Next / previous page |
 | `gg` / `G` | First / last page |
 | `nG` / `:n` | Go to page n (e.g. `5G`, `:5`) |
-| `m{a-z}` | Save current position as a mark |
+| `m{a-z}` | Save current position as a mark (kept per file, restored when you reopen it) |
 | `'{a-z}` / `` `{a-z}`` | Jump to a saved mark |
 | `Ctrl+O` / `Ctrl+I` | Jump to older / newer position |
 | `f` | Show link hints, then jump |
