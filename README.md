@@ -112,12 +112,14 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 
 ### Navigation
 
+Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi`.
+
 | Key | Action |
 |-----|--------|
 | `j` / `k` | Scroll down / up |
 | `h` / `l` | Scroll left / right |
 | `Ctrl+D` / `Ctrl+U` | Scroll half page down/up |
-| `J` / `K` | Next / previous page |
+| `J` / `K` | Next / previous page (`3J` = 3 pages ahead) |
 | `gg` / `G` | First / last page |
 | `nG` / `:n` | Go to page n (e.g. `5G`, `:5`) |
 | `m{a-z}` | Save current position as a mark (kept per file, restored when you reopen it) |
@@ -135,7 +137,7 @@ The full list is available in the [key mapping reference](https://vimong.app/en/
 | Key | Action |
 |-----|--------|
 | `zi` / `zo` | Zoom in / out |
-| `z0` | 100% size |
+| `z0` | 100% size (`150z0` = 150%) |
 | `zh` | Fit width |
 | `zv` / `zz` | Fit height |
 | `Cmd++` / `Cmd+-` | Zoom in / out |

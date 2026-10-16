@@ -2815,6 +2815,7 @@
 
   let numBuf = '';          // digit prefix for nG
   let pendingPrefix = '';   // 'g' or 'z' waiting for next key
+  /** @type {number | null} */
   let pendingN = null;      // numeric prefix saved when setting pendingPrefix
   let zHeld = false;        // true while z key is physically held down — z를 쥔 채로 i/o를
                              // 반복해서 눌러도(PDF 뷰어 관례) 매번 z를 다시 안 눌러도 되게 한다
@@ -4812,11 +4813,14 @@
       // (zi/zo를 반복할 때 홀수 번째가 반응 없는 것처럼 보인 원인) — 그래서 z를 뗄 때(아래
       // svelte:window의 onkeyup)도 pendingPrefix를 같이 지운다.
       pendingPrefix = zHeld ? 'z' : '';
+      // {n}zi/{n}zo는 n단계, {n}z0은 n%로 — z를 쥔 채 반복하는 두 번째 i/o부터는 한 단계씩
+      const zN = pendingN; pendingN = null;
+      const zc = zN ?? 1;
       if (mdMode) {
         // 마크다운은 페이지 폭/높이 개념이 없어 zh/zv/zz(핏)는 zi/zo/z0와 같은 "폰트 확대/축소"로
         // 대신한다 — scale(캔버스 렌더 배율)과 별개로 CSS 폰트 크기 배율만 바꾼다(triggerRerender 불필요).
-        if (key === 'i') { mdScale = Math.min(+(mdScale + 0.1).toFixed(2), 3); return; }
-        if (key === 'o') { mdScale = Math.max(+(mdScale - 0.1).toFixed(2), 0.5); return; }
+        if (key === 'i') { mdScale = Math.min(+(mdScale + 0.1 * zc).toFixed(2), 3); return; }
+        if (key === 'o') { mdScale = Math.max(+(mdScale - 0.1 * zc).toFixed(2), 0.5); return; }
         if (['0', 'h', 'v', 'z'].includes(key)) { mdScale = 1.0; return; }
         return;
       }
@@ -4825,13 +4829,13 @@
         // zh/zv/zz(맞춤)는 페이지 자체 크기(REFLOW_WIDTH x REFLOW_HEIGHT)가 폰트 크기와
         // 무관하게 고정이라 아래 일반 scale 맞춤 로직을 그대로 써도 의미가 있다 — 그래서
         // 여기서 안 가로채고 흘려보낸다.
-        if (key === 'i') { requestReflowFontSize((pendingEpubEm ?? epubFontSize) + EPUB_EM_STEP); return; }
-        if (key === 'o') { requestReflowFontSize((pendingEpubEm ?? epubFontSize) - EPUB_EM_STEP); return; }
+        if (key === 'i') { requestReflowFontSize((pendingEpubEm ?? epubFontSize) + EPUB_EM_STEP * zc); return; }
+        if (key === 'o') { requestReflowFontSize((pendingEpubEm ?? epubFontSize) - EPUB_EM_STEP * zc); return; }
         if (key === '0') { requestReflowFontSize(DEFAULT_EPUB_EM); return; }
       }
-      if (key === 'i') { scale = Math.min(+(scale + 0.25).toFixed(2), 12); triggerRerender(); return; }
-      if (key === 'o') { scale = Math.max(+(scale - 0.25).toFixed(2), 0.25); triggerRerender(); return; }
-      if (key === '0') { scale = 1.0; triggerRerender(); return; }
+      if (key === 'i') { scale = Math.min(+(scale + 0.25 * zc).toFixed(2), 12); triggerRerender(); return; }
+      if (key === 'o') { scale = Math.max(+(scale - 0.25 * zc).toFixed(2), 0.25); triggerRerender(); return; }
+      if (key === '0') { scale = zN ? Math.min(Math.max(zN / 100, 0.25), 12) : 1.0; triggerRerender(); return; }
       if (key === 'h') { await fitToWidth(); return; }
       if (key === 'v' || key === 'z') { await fitToHeight(); return; }
     }
@@ -4898,42 +4902,43 @@
 
     const n = numBuf ? parseInt(numBuf, 10) : null;
     numBuf = '';
+    const count = n ?? 1; // 5j/3J/2Ctrl-d/3n 같은 반복 횟수 — 결과를 한 번에 계산해서 렌더/점프 기록도 한 번만
 
     // ── normal-mode commands ──
     const pageStep = isTwoUp(viewMode) ? 2 : 1;
     if (key === 'j') {
-      if (mdMode) { mdComponentRef?.scrollBy(60); }
+      if (mdMode) { mdComponentRef?.scrollBy(60 * count); }
       // 연속 모드는 페이지 경계에서 안 끊기고 그대로 흘러가는 게 핵심이라 스냅 없이 스크롤만
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, 60); }
+      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, 60 * count); }
       else {
         const atBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 4;
         if (atBottom && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep);
-        else mainEl.scrollBy(0, 60);
+        else mainEl.scrollBy(0, 60 * count);
       }
     } else if (key === 'J') {
-      if (!mdMode && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep);
+      if (!mdMode && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep * count);
     } else if (key === 'K') {
-      if (!mdMode && currentPage > 0) await gotoPage(currentPage - pageStep);
+      if (!mdMode && currentPage > 0) await gotoPage(currentPage - pageStep * count);
     } else if (key === 'k') {
-      if (mdMode) { mdComponentRef?.scrollBy(-60); }
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, -60); }
+      if (mdMode) { mdComponentRef?.scrollBy(-60 * count); }
+      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, -60 * count); }
       else {
         const atTop = mainEl.scrollTop <= 4;
         if (atTop && currentPage > 0) {
           await gotoPage(currentPage - pageStep);
           setTimeout(() => mainEl.scrollTo(0, mainEl.scrollHeight), 50);
         } else {
-          mainEl.scrollBy(0, -60);
+          mainEl.scrollBy(0, -60 * count);
         }
       }
     } else if (key === 'l') {
-      if (mdMode) mdComponentRef?.scrollByX(60);
+      if (mdMode) mdComponentRef?.scrollByX(60 * count);
       else if (cursor) charMotion(1);
-      else mainEl.scrollBy(60, 0);
+      else mainEl.scrollBy(60 * count, 0);
     } else if (key === 'h') {
-      if (mdMode) mdComponentRef?.scrollByX(-60);
+      if (mdMode) mdComponentRef?.scrollByX(-60 * count);
       else if (cursor) charMotion(-1);
-      else mainEl.scrollBy(-60, 0);
+      else mainEl.scrollBy(-60 * count, 0);
     } else if (e.ctrlKey && !e.metaKey && key === 'r') {
       e.preventDefault(); // zathura의 recolor 키 — 일반 r(페이지 회전) 분기보다 먼저 잡아야 한다
       togglePageInvert();
@@ -4945,8 +4950,8 @@
       await jumpForward();
     } else if ((e.ctrlKey || e.metaKey) && key === 'd') {
       e.preventDefault(); // 브라우저 기본 단축키(북마크 등)와 겹치니 확실히 막는다
-      if (mdMode) { mdComponentRef?.halfPageScrollBy(1); }
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, halfPageStep()); }
+      if (mdMode) { mdComponentRef?.halfPageScrollBy(count); }
+      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, halfPageStep() * count); }
       else {
         // single/two 모드는 화면에 페이지가 딱 하나(쌍)뿐이라, "이 스크롤 컨테이너가 움직일
         // 수 있는 전체 거리"의 절반을 그대로 쓰면 된다 — .viewer의 padding까지 자동으로
@@ -4955,12 +4960,12 @@
         const half = (mainEl.scrollHeight - mainEl.clientHeight) / 2;
         const atBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 4;
         if (atBottom && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep);
-        else mainEl.scrollBy(0, half);
+        else mainEl.scrollBy(0, half * count);
       }
     } else if ((e.ctrlKey || e.metaKey) && key === 'u') {
       e.preventDefault();
-      if (mdMode) { mdComponentRef?.halfPageScrollBy(-1); }
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, -halfPageStep()); }
+      if (mdMode) { mdComponentRef?.halfPageScrollBy(-count); }
+      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, -halfPageStep() * count); }
       else {
         const half = (mainEl.scrollHeight - mainEl.clientHeight) / 2;
         const atTop = mainEl.scrollTop <= 4;
@@ -4968,7 +4973,7 @@
           await gotoPage(currentPage - pageStep);
           setTimeout(() => mainEl.scrollTo(0, mainEl.scrollHeight), 50);
         } else {
-          mainEl.scrollBy(0, -half);
+          mainEl.scrollBy(0, -half * count);
         }
       }
     } else if (key === 'r') {
@@ -4993,6 +4998,7 @@
     } else if (key === 'g') {
       pendingN = n; pendingPrefix = 'g';
     } else if (key === 'z') {
+      pendingN = n; // {n}zi/{n}zo/{n}z0 — g 프리픽스와 같은 방식으로 숫자를 넘긴다
       zHeld = true;
       zUsed = false;
       pendingPrefix = 'z';
@@ -5014,9 +5020,9 @@
     } else if (key === '/') {
       await focusSearchTab();
     } else if (key === 'n' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(1);
+      await gotoSearchMatch(count);
     } else if (key === 'N' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(-1);
+      await gotoSearchMatch(-count);
     } else if (key === ']') {
       await cycleSidebarView(1);
     } else if (key === '[') {
@@ -5183,7 +5189,7 @@
     if (mdMode) {
       if (mdSearchResults.length === 0) return;
       hlsearchOn = true;
-      searchResultIdx = (searchResultIdx + dir + mdSearchResults.length) % mdSearchResults.length;
+      searchResultIdx = (((searchResultIdx + dir) % mdSearchResults.length) + mdSearchResults.length) % mdSearchResults.length;
       jumpToMdSearchHit(searchResultIdx);
       await tick();
       focusNearestItem(searchResultEls, searchResultIdx);
@@ -5193,7 +5199,7 @@
     if (flat.length === 0) return;
     hlsearchOn = true;
     pushJump();
-    searchResultIdx = (searchResultIdx + dir + flat.length) % flat.length;
+    searchResultIdx = (((searchResultIdx + dir) % flat.length) + flat.length) % flat.length;
     const m = flat[searchResultIdx];
     if (m.page !== currentPage) await gotoPage(m.page);
     // hwp는 rect가 실제 좌표가 아닌 더미값(문자 단위 커서/선택 좌표를 rhwp가 아직 제공하지 않음)
