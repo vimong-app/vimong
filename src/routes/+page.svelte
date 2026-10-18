@@ -2136,6 +2136,7 @@
     anchorIdx = idx;
     cursor = { page, idx };
     visualMode = false;
+    focusPageForCursor();
   }
 
   // 커서 글자가 지금 화면에 (일부라도) 보이는지 — J/K·Ctrl-d·마우스 스크롤로 화면만 옮겨 커서가 이전 페이지에
@@ -2148,6 +2149,20 @@
     const p = el.getBoundingClientRect(), m = mainEl.getBoundingClientRect();
     const top = p.top + c.rect[1] * scale, bottom = p.top + c.rect[3] * scale;
     return bottom > m.top && top < m.bottom;
+  }
+
+  // 텍스트 선택 도구로 바꾸되 지금 커서는 살린다 — setToolMode가 커서를 지우므로 잠깐 들고 있다가 되돌린다
+  function revealCursor() {
+    const keep = { cursor, anchorIdx, visualMode };
+    setToolMode('text');
+    cursor = keep.cursor; anchorIdx = keep.anchorIdx; visualMode = keep.visualMode;
+    focusPageForCursor();
+  }
+
+  // 키보드로 커서를 보이게 했으면 키 포커스를 본문으로 — 사이드바(검색 결과·썸네일 목록)에 포커스가 남아 있으면
+  // j/k가 커서 대신 그 목록을 움직여서(검색 결과의 다음/이전 페이지로 이동) 커서 줄 이동이 안 됐다
+  function focusPageForCursor() {
+    if (isFocusInSidebar()) mainEl?.focus();
   }
 
   // 커서가 화면 밖으로 나가면 따라 스크롤 — v·w/b/e·h/l·검색 등 커서를 옮기는 모든 경로 공통.
@@ -4568,6 +4583,7 @@
     if (visualMode && cursor && cursor.page === h.page) { if (anchorIdx === null) anchorIdx = cursor.idx; }
     else { anchorIdx = h.idx; visualMode = false; }
     cursor = { page: h.page, idx: h.idx };
+    focusPageForCursor();
   }
 
   // 목적지를 못 찾은 내부 참조(각주 하이퍼타겟이 문서에 아예 등록 안 돼 있는 경우 등)의
@@ -4795,7 +4811,8 @@
         // 검색 결과가 남아있어도 선택 취소가 먼저 — 아래 검색 결과 지우기보다 우선한다
         visualMode = false;
         anchorIdx = cursor.idx; // 선택은 접고 캐럿만 남긴다
-      } else if (cursor) {
+      } else if (cursor && textSelectMode) {
+        // 보이는 커서만 먼저 지운다 — 손 도구에서 검색으로 놓인 안 보이는 커서를 지우느라 Esc 한 번이 헛도는 일이 없게
         anchorIdx = null;
         cursor = null;
       } else if (mdMode && mdSearchResults.length > 0) {
@@ -4804,6 +4821,7 @@
       } else if (allSearchResults.length > 0) {
         allSearchResults = [];
         pageHighlights = [];
+        anchorIdx = null; cursor = null; // 검색이 놓은 (안 보이는) 커서도 같이 정리
         if (sidebarView === 'search') sidebarView = tocIsMeaningful ? 'toc' : 'thumbs';
       }
       return;
@@ -5252,6 +5270,13 @@
 
     // ── normal-mode commands ──
     const pageStep = isTwoUp(viewMode) ? 2 : 1;
+    // 손 도구에서 검색으로 놓인 커서는 안 그려진다(커서는 텍스트 선택 도구에서만 그림). 커서를 쓰는 키를 누르는
+    // 순간 텍스트 선택 도구로 바꿔 그 커서를 보여준다 — 검색만 하는 사람에겐 도구가 안 바뀌게 여기서 늦게 바꾼다.
+    // j/k는 손 도구에선 스크롤로 남긴다. v는 "커서 보이기"까지만(선택은 다음 v부터)
+    if (!textSelectMode && !mdMode && cursor && cursorInView() && ['w', 'W', 'b', 'B', 'e', 'E', 'v', '^', '$', '*', '#'].includes(key)) {
+      revealCursor();
+      if (key === 'v') return;
+    }
     // 커서가 보일 때(텍스트 선택 도구, 또는 선택 중)만 j/k가 줄 이동 — 손 도구에서 검색해 생긴 안 보이는
     // 커서는 그대로 두고 지금처럼 스크롤한다. Esc로 커서를 없애면 다시 스크롤 키.
     // 커서가 화면 밖에 남아 있으면(페이지를 옮긴 뒤 등) 스크롤로 동작한다 — 안 그러면 안 보이는 옛 커서를 움직이고
@@ -6198,12 +6223,18 @@
         const totalHits = results.reduce((s, r) => s + r.hit_count, 0);
         statusMsg = `/${query}  [${totalHits} hit${totalHits > 1 ? 's' : ''} on ${results.length} page${results.length > 1 ? 's' : ''}]`;
         if (!jump) return;
-        await gotoPage(results[0].page);
+        // 페이지 맨 위가 아니라 첫 결과 위치로 가서 그 단어에 커서를 놓는다(n과 같은 경로, 점프리스트에도 남음) —
+        // 예전엔 페이지로만 가고 커서를 안 놓아서, 검색 직후 w/v가 엉뚱하게 동작했다
+        searchResultIdx = -1; // gotoSearchMatch(1)이 0번째 결과로
+        await gotoSearchMatch(1);
         // 검색 직후 바로 j/k로 결과를 훑을 수 있게 사이드바 첫 결과에 포커스 —
         // allSearchResults가 방금 바뀌어서 검색결과 DOM(searchResultEls)이 아직 그
         // 전 상태일 수 있으니 렌더링이 실제로 반영될 때까지 기다린 뒤에 포커스한다
         await tick();
-        focusNearestItem(searchResultEls, 0);
+        // 텍스트 선택 도구면 방금 놓은 커서가 보이니 j/k로 그 커서를 움직이게 본문에 포커스. 손 도구면 커서가 안
+        // 보이므로 예전처럼 사이드바 첫 결과에 포커스해 j/k로 결과를 훑게 한다
+        if (textSelectMode) mainEl?.focus();
+        else focusNearestItem(searchResultEls, 0);
       } else {
         pageHighlights = [];
         statusMsg = `Pattern not found: ${query}`;
