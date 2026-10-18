@@ -4974,6 +4974,15 @@ pub(crate) struct TextChar {
     font: Option<String>,
 }
 
+// 같은 줄의 두 글자 사이가 띄어쓰기만큼 벌어졌는지 — 공백 글리프 없이 글자 위치만 띄워 조판한
+// PDF(예: 일부 한글 TeX 문서)는 MuPDF가 공백을 안 넣어서 "포인트가아니라"처럼 단어가 붙어 나오고,
+// 그러면 w/e/b·더블클릭·복사가 단어를 못 나눈다. 실측: 단어 안 -0.4~0pt, 단어 사이 2.5~3.3pt
+// (글자 높이 12.4pt의 20~27%), 같은 단어 속 라틴→한글 전환("mu를") 1.2pt — 높이의 15%로 가른다.
+fn is_word_gap(prev: &[f32; 4], cur: &[f32; 4]) -> bool {
+    let h = (prev[3] - prev[1]).max(cur[3] - cur[1]);
+    cur[0] - prev[2] > h * 0.15
+}
+
 // extract_chars(검색용)와 거의 같은 순회지만 폰트까지 뽑는다. 검색 쪽은 폰트가 필요
 // 없고 이미 테스트로 검증돼 있어서, 그걸 건드리는 대신 여기서 따로 순회한다.
 fn extract_chars_with_font(page: &mupdf::Page) -> Result<Vec<TextChar>, String> {
@@ -4985,7 +4994,16 @@ fn extract_chars_with_font(page: &mupdf::Page) -> Result<Vec<TextChar>, String> 
             for ch in line.chars() {
                 if let Some(c) = ch.char() {
                     let font = ch.font().map(|f| safe_font_name(&f));
-                    chars.push(TextChar { ch: c, rect: quad_to_rect(&ch.quad()), font });
+                    let rect = quad_to_rect(&ch.quad());
+                    // 띄어쓰기를 위치로만 표현한 PDF — 그 간격 자리에 공백 한 칸을 끼워 단어를 나눈다
+                    if let Some(prev) = chars[start..].last() {
+                        if !c.is_whitespace() && !prev.ch.is_whitespace() && is_word_gap(&prev.rect, &rect) {
+                            let gap = [prev.rect[2], prev.rect[1].min(rect[1]), rect[0], prev.rect[3].max(rect[3])];
+                            let gap_font = prev.font.clone();
+                            chars.push(TextChar { ch: ' ', rect: gap, font: gap_font });
+                        }
+                    }
+                    chars.push(TextChar { ch: c, rect, font });
                 }
             }
             // 줄바꿈은 공백으로 취급 — extract_chars와 같은 이유(문자 인덱스 연속성 유지)
@@ -5460,4 +5478,19 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod word_gap_tests {
+    use super::is_word_gap;
+
+    // jntexbook.pdf 52쪽 실측값(높이 12.4pt 한글, 9pt 라틴)
+    #[test]
+    fn splits_positioned_spaces_only() {
+        let r = |x0: f32, x1: f32, h: f32| [x0, 0.0, x1, h];
+        assert!(!is_word_gap(&r(0.0, 10.0, 12.4), &r(9.6, 20.0, 12.4))); // 단어 안(-0.4pt)
+        assert!(is_word_gap(&r(0.0, 10.0, 12.4), &r(12.5, 22.0, 12.4))); // 단어 사이(2.5pt)
+        assert!(is_word_gap(&r(0.0, 10.0, 12.4), &r(13.3, 23.0, 12.4))); // 단어 사이(3.3pt)
+        assert!(!is_word_gap(&r(0.0, 5.0, 9.0), &r(6.2, 16.0, 12.4))); // "mu를" 라틴→한글(1.2pt)
+    }
 }
