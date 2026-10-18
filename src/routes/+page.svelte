@@ -5591,6 +5591,33 @@
     return allSearchResults.flatMap(r => r.rects.map(rect => ({ page: r.page, rect })));
   }
 
+  // 결과 목록(flatSearchMatches 순서)에서 (page, y, x) 위치보다 뒤에 시작하는 첫 결과 — 페이지 → 위아래 → 좌우 순.
+  // 없으면 -1. * / #의 "커서 다음 결과"와 / Enter의 "지금 위치 다음 결과"가 같이 쓴다
+  /** @param {{page: number, rect: number[]}[]} flat @param {number} page @param {number} y @param {number} x */
+  function matchAfter(flat, page, y, x) {
+    return flat.findIndex(m => m.page > page || (m.page === page && (m.rect[1] > y || (m.rect[1] === y && m.rect[0] > x))));
+  }
+
+  // / Enter가 처음 갈 결과 — vim처럼 "지금 위치 다음"부터. 보이는 커서가 있으면 그 글자 바로 뒤(걸친 결과는 건너뜀),
+  // 없으면 화면 맨 위(이미 화면에 보이는 결과부터). 뒤에 없으면 처음으로 돌아간다(wrapped=true).
+  // ponytail: 화면 맨 위는 화면 위쪽에 걸친 첫 보이는 페이지 기준 — 두 페이지 나란히 보기에선 왼쪽 페이지만 본다
+  /** @param {{page: number, rect: number[]}[]} flat @returns {{idx: number, wrapped: boolean}} */
+  function firstMatchFromHere(flat) {
+    let idx = -1;
+    const c = cursor && cursorInView() ? pageCharCache.get(cursor.page)?.[cursor.idx] : null;
+    if (c && cursor) {
+      idx = matchAfter(flat, cursor.page, c.rect[1], c.rect[0]);
+    } else if (mainEl) {
+      const m = mainEl.getBoundingClientRect();
+      const pages = [...visiblePageSet].sort((a, b) => a - b);
+      const page = pages.find(p => (pageWrapEls[p]?.getBoundingClientRect().bottom ?? -Infinity) > m.top) ?? currentPage;
+      const el = pageWrapEls[page];
+      const viewTop = el ? Math.max(0, (m.top - el.getBoundingClientRect().top) / scale) : 0;
+      idx = matchAfter(flat, page, viewTop - 0.01, -Infinity); // 화면 맨 위 줄에 걸친 결과도 포함
+    }
+    return idx === -1 ? { idx: 0, wrapped: true } : { idx, wrapped: false };
+  }
+
   // vim의 <cword>/<cWORD> 고르는 순서(:help star) — 같은 줄 안에서 ① 커서 아래 단어 글자 덩어리 ② 커서 뒤 첫 단어
   // ③ 커서 아래 공백 아닌 덩어리 ④ 커서 뒤 첫 공백 아닌 덩어리. big(WORD)이면 ③④만 — TeX의 \emergencystretch처럼
   // 기호가 붙은 덩어리 통째. 커서가 \ 위면 <cword>는 뒤따르는 emergencystretch, <cWORD>는 \emergencystretch.
@@ -5659,7 +5686,7 @@
     const overlaps = (/** @type {number[]} */ a) => rect && a[0] < rect[2] && rect[0] < a[2] && a[1] < rect[3] && rect[1] < a[3];
     let cur = flat.findIndex(m => m.page === page && overlaps(m.rect));
     if (cur === -1) {
-      const after = flat.findIndex(m => m.page > page || (m.page === page && rect && (m.rect[1] > rect[1] || (m.rect[1] === rect[1] && m.rect[0] > rect[0]))));
+      const after = rect ? matchAfter(flat, page, rect[1], rect[0]) : flat.findIndex(m => m.page > page);
       cur = after === -1 ? (dir > 0 ? flat.length - 1 : flat.length) : (dir > 0 ? after - 1 : after);
     }
     searchResultIdx = cur;
@@ -6243,8 +6270,12 @@
         if (!jump) return;
         // 페이지 맨 위가 아니라 첫 결과 위치로 가서 그 단어에 커서를 놓는다(n과 같은 경로, 점프리스트에도 남음) —
         // 예전엔 페이지로만 가고 커서를 안 놓아서, 검색 직후 w/v가 엉뚱하게 동작했다
-        searchResultIdx = -1; // gotoSearchMatch(1)이 0번째 결과로
+        // 문서 맨 앞이 아니라 지금 위치 다음 결과부터(vim의 /). 사이드바 목록·하이라이트는 그대로 문서 전체
+        const { idx: firstIdx, wrapped } = firstMatchFromHere(flatSearchMatches());
+        searchResultIdx = firstIdx - 1; // gotoSearchMatch(1)이 firstIdx로
         await gotoSearchMatch(1);
+        if (wrapped) statusMsg += '  ' + t('status.search_wrapped');
+        const firstPageIdx = Math.max(0, results.findIndex(r => r.page === flatSearchMatches()[firstIdx]?.page));
         // 검색 직후 바로 j/k로 결과를 훑을 수 있게 사이드바 첫 결과에 포커스 —
         // allSearchResults가 방금 바뀌어서 검색결과 DOM(searchResultEls)이 아직 그
         // 전 상태일 수 있으니 렌더링이 실제로 반영될 때까지 기다린 뒤에 포커스한다
@@ -6252,7 +6283,7 @@
         // 텍스트 선택 도구면 방금 놓은 커서가 보이니 j/k로 그 커서를 움직이게 본문에 포커스. 손 도구면 커서가 안
         // 보이므로 예전처럼 사이드바 첫 결과에 포커스해 j/k로 결과를 훑게 한다
         if (textSelectMode) mainEl?.focus();
-        else focusNearestItem(searchResultEls, 0);
+        else focusNearestItem(searchResultEls, firstPageIdx); // 이동한 결과가 있는 페이지 항목
       } else {
         pageHighlights = [];
         statusMsg = `Pattern not found: ${query}`;
