@@ -2204,6 +2204,21 @@
     lineGoal = { idx, x: goalX };
   }
 
+  // ^ / $ — 지금 줄의 첫 / 마지막 글자로(공백 제외, vim의 ^와 $). 줄은 j/k와 같은 charLines 기준
+  /** @param {boolean} toEnd */
+  function lineEdgeMotion(toEnd) {
+    if (!cursor) return;
+    const chars = pageCharCache.get(cursor.page);
+    if (!chars || chars.length === 0) return;
+    const { lineOf, lines } = charLines(chars, pageSizes[cursor.page]?.[0] ?? Infinity);
+    const line = lines[lineOf[cursor.idx] ?? 0];
+    if (!line || line.length === 0) return;
+    const idx = toEnd ? line[line.length - 1] : line[0];
+    if (visualMode) { if (anchorIdx === null) anchorIdx = cursor.idx; } // 선택 중이면 anchor 고정, 범위만 줄 끝까지
+    else anchorIdx = idx;
+    cursor = { page: cursor.page, idx };
+  }
+
   // 커서가 있을 때 h/l로 한 글자씩 이동 — dir: -1(왼쪽/뒤) | 1(오른쪽/앞)
   function charMotion(dir) {
     if (!cursor) return;
@@ -5209,8 +5224,12 @@
     // 화면 밖에 남은 옛 커서는 w/b/e/h/l로도 안 움직인다(움직이면 화면이 그쪽으로 끌려감) — 선택 중일 때만 예외
     const caretLive = !!cursor && (visualMode || cursorInView());
     const caretLines = !mdMode && caretLive && (visualMode || textSelectMode);
+    // ^는 일부 키보드 배열(US-International 등)에서 데드키라 e.key가 'Dead'로 올 수 있어 물리 키(Shift+6)도 본다
+    const isCaret = key === '^' || (key === 'Dead' && e.code === 'Digit6' && e.shiftKey);
     if (caretLines && (key === 'j' || key === 'k')) {
       lineMotion(key === 'j' ? count : -count);
+    } else if (caretLines && (isCaret || key === '$')) {
+      lineEdgeMotion(key === '$');
     } else if (key === 'j') {
       if (mdMode) { mdComponentRef?.scrollBy(60 * count); }
       // 연속 모드는 페이지 경계에서 안 끊기고 그대로 흘러가는 게 핵심이라 스냅 없이 스크롤만
