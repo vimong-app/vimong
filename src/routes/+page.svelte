@@ -2278,6 +2278,30 @@
     lineGoal = { idx, x: goalX };
   }
 
+  // vim의 f{글자} / F{글자} — 지금 줄에서 커서 오른쪽(F면 왼쪽)으로 그 글자가 count번째 나오는 곳으로. 없으면 그대로.
+  // ; 는 마지막 f/F를 같은 방향으로, , 는 반대 방향으로 반복(lastFind). 줄은 j/k와 같은 charLines 기준
+  /** @type {{ch: string, dir: number} | null} */
+  let lastFind = null;
+  /** @param {string} ch @param {number} dir 1(f) | -1(F) @param {number} count */
+  function findCharMotion(ch, dir, count) {
+    if (!cursor) return;
+    const chars = pageCharCache.get(cursor.page);
+    if (!chars || chars.length === 0) return;
+    const { lineOf } = charLines(chars, pageSizes[cursor.page]?.[0] ?? Infinity);
+    const line = lineOf[cursor.idx];
+    let i = cursor.idx, found = -1;
+    for (let k = 0; k < count; k++) {
+      i += dir;
+      while (i >= 0 && i < chars.length && lineOf[i] === line && chars[i].ch !== ch) i += dir;
+      if (i < 0 || i >= chars.length || lineOf[i] !== line) { found = -1; break; } // 이 줄엔 더 없음 — vim처럼 안 움직임
+      found = i;
+    }
+    if (found === -1) return;
+    if (visualMode) { if (anchorIdx === null) anchorIdx = cursor.idx; } // 선택 중이면 anchor 고정, 범위만 늘림
+    else anchorIdx = found;
+    cursor = { page: cursor.page, idx: found };
+  }
+
   // ^ / $ — 지금 줄의 첫 / 마지막 글자로(공백 제외, vim의 ^와 $). 줄은 j/k와 같은 charLines 기준
   /** @param {boolean} toEnd */
   function lineEdgeMotion(toEnd) {
@@ -5284,6 +5308,15 @@
     }
 
     // ── m-prefix: m{a-z} 현재 위치를 마크로 저장 ──
+    // ── f/F-prefix: 다음에 누른 글자를 지금 줄에서 찾는다 ──
+    if (pendingPrefix === 'f' || pendingPrefix === 'F') {
+      const dir = pendingPrefix === 'f' ? 1 : -1;
+      pendingPrefix = '';
+      const fn = pendingN ?? 1; pendingN = null;
+      if (key.length === 1) { lastFind = { ch: key, dir }; findCharMotion(key, dir, fn); }
+      return; // Esc 등 글자가 아닌 키면 취소
+    }
+
     if (pendingPrefix === 'm') {
       pendingPrefix = '';
       // 마크다운은 스크롤이 Markdown 컴포넌트 안(코드/미리보기 창)에서 일어나 mainEl 기준 위치가
@@ -5448,6 +5481,11 @@
       // 키보드 레이아웃(예: US-International)에서 억양 합성용 데드키라 e.key가 "'"/"`"가
       // 아니라 "Dead"로 올 수 있어 물리 키 위치 기준인 e.code도 같이 본다.
       pendingPrefix = "'";
+    } else if ((key === 'f' || key === 'F') && caretLines) {
+      // 커서가 보일 땐 vim의 f/F(줄 안 글자 찾기), 아니면 아래 링크 힌트. 링크 힌트가 필요하면 Esc로 커서를 없애고 f
+      pendingPrefix = key; pendingN = n;
+    } else if ((key === ';' || key === ',') && caretLines && lastFind) {
+      findCharMotion(lastFind.ch, key === ';' ? lastFind.dir : -lastFind.dir, count);
     } else if (key === 'f') {
       await activateLinkHints();
     } else if (key === ':') {
@@ -7392,6 +7430,7 @@
               <tr><td>m{'{A-Z}'} / '{'{A-Z}'}</td><td>{t('shortcuts.nav.global_mark')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
+              <tr><td>f{'{c}'} / F{'{c}'} ; ,</td><td>{t('shortcuts.nav.find_char')}</td></tr>
               <tr><td>s</td><td>{t('shortcuts.nav.line_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
               <tr><td>u / ⌘Z</td><td>{t('shortcuts.nav.undo_highlight')}</td></tr>
