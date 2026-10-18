@@ -2773,6 +2773,7 @@
   const COMMAND_NAMES = ['q', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm'];
   const PATH_ARG_COMMANDS = ['e', 'w', 'export']; // 인자로 경로를 받는 명령 — 여기만 경로 자동완성 대상
   const MD_SUBCOMMANDS = ['code', 'preview', 'split', 'theme']; // :md 서브명령 Tab 자동완성 후보
+  const SET_OPTIONS = ['invert', 'noinvert', 'invert!', 'lang=']; // :set 옵션 Tab 자동완성 후보 (execCommand의 :set 분기와 맞출 것)
   /** @type {{kind: string, candidates: string[], idx: number, prefix?: string} | null} */
   let cmdCompletion = $state(null); // Tab 순환 상태 + 상태표시줄 위 후보 목록 표시용
   let cmdSuggestEls = [];
@@ -2834,6 +2835,22 @@
         const candidates = MD_SUBCOMMANDS.filter(name => name.startsWith(partial));
         if (candidates.length === 0) { cmdCompletion = null; return; }
         cmdCompletion = { kind: 'md-sub', candidates, idx: 0, prefix };
+      } else {
+        cmdCompletion.idx = (cmdCompletion.idx + dir + cmdCompletion.candidates.length) % cmdCompletion.candidates.length;
+      }
+      cmdInput = cmdCompletion.prefix + cmdCompletion.candidates[cmdCompletion.idx];
+      return;
+    }
+
+    // ":set <옵션>" — invert/noinvert/invert!/lang= 자동완성(:md 서브명령과 같은 방식)
+    const setMatch = /^set\s+(\S*)$/.exec(cmdInput);
+    if (setMatch) {
+      const prefix = cmdInput.slice(0, cmdInput.length - setMatch[1].length);
+      const partial = setMatch[1];
+      if (!cmdCompletion || cmdCompletion.kind !== 'set-opt' || cmdInput !== prefix + cmdCompletion.candidates[cmdCompletion.idx]) {
+        const candidates = SET_OPTIONS.filter(name => name.startsWith(partial));
+        if (candidates.length === 0) { cmdCompletion = null; return; }
+        cmdCompletion = { kind: 'set-opt', candidates, idx: 0, prefix };
       } else {
         cmdCompletion.idx = (cmdCompletion.idx + dir + cmdCompletion.candidates.length) % cmdCompletion.candidates.length;
       }
