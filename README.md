@@ -48,8 +48,10 @@ See full descriptions on the [website](https://vimong.app/en/).
 macOS (Apple Silicon) via [Homebrew](https://brew.sh):
 
 ```bash
-brew install --cask vimong-app/tap/vimong
+brew install -y --cask vimong-app/tap/vimong
 ```
+
+`-y` skips Homebrew's confirmation prompt (Homebrew 6.0+; drop it on older versions).
 
 Or download the `.dmg` from [Releases](https://github.com/vimong-app/vimong/releases/latest).
 

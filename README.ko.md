@@ -47,8 +47,10 @@ Vimong은 화면을 마우스로 스크롤하는 대신 `j`/`k`/`gg`/`G` 같은 
 macOS (Apple Silicon) — [Homebrew](https://brew.sh)로 설치:
 
 ```bash
-brew install --cask vimong-app/tap/vimong
+brew install -y --cask vimong-app/tap/vimong
 ```
+
+`-y`는 Homebrew의 설치 확인 질문을 건너뜁니다(Homebrew 6.0 이상, 그 이전 버전에서는 빼고 실행).
 
 또는 [Releases](https://github.com/vimong-app/vimong/releases/latest)에서 `.dmg`를 내려받으세요.
 
