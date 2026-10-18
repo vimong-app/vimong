@@ -2121,6 +2121,18 @@
     visualMode = false;
   }
 
+  // 커서 글자가 지금 화면에 (일부라도) 보이는지 — J/K·Ctrl-d·마우스 스크롤로 화면만 옮겨 커서가 이전 페이지에
+  // 남은 경우를 가린다. 그 페이지가 아예 안 그려져 있으면(한 페이지 보기에서 다른 페이지) 안 보이는 것.
+  function cursorInView() {
+    if (!cursor || !mainEl) return false;
+    const c = pageCharCache.get(cursor.page)?.[cursor.idx];
+    const el = pageWrapEls[cursor.page];
+    if (!c || !el) return false;
+    const p = el.getBoundingClientRect(), m = mainEl.getBoundingClientRect();
+    const top = p.top + c.rect[1] * scale, bottom = p.top + c.rect[3] * scale;
+    return bottom > m.top && top < m.bottom;
+  }
+
   // 커서가 화면 밖으로 나가면 따라 스크롤 — v·w/b/e·h/l·검색 등 커서를 옮기는 모든 경로 공통.
   // 커서만 의존한다(untrack) — 배율/레이아웃이 바뀔 때마다 커서로 끌려가면 안 되니까.
   // 회전된 페이지는 글자 좌표가 회전 전 기준이라(커서 오버레이도 안 그림) 건너뛴다.
@@ -5192,7 +5204,11 @@
     const pageStep = isTwoUp(viewMode) ? 2 : 1;
     // 커서가 보일 때(텍스트 선택 도구, 또는 선택 중)만 j/k가 줄 이동 — 손 도구에서 검색해 생긴 안 보이는
     // 커서는 그대로 두고 지금처럼 스크롤한다. Esc로 커서를 없애면 다시 스크롤 키.
-    const caretLines = !mdMode && cursor && (textSelectMode || visualMode);
+    // 커서가 화면 밖에 남아 있으면(페이지를 옮긴 뒤 등) 스크롤로 동작한다 — 안 그러면 안 보이는 옛 커서를 움직이고
+    // 화면이 그쪽으로 끌려간다. 선택 중일 땐 화면 밖이어도 선택을 이어서 늘릴 수 있게 그대로 줄 이동.
+    // 화면 밖에 남은 옛 커서는 w/b/e/h/l로도 안 움직인다(움직이면 화면이 그쪽으로 끌려감) — 선택 중일 때만 예외
+    const caretLive = !!cursor && (visualMode || cursorInView());
+    const caretLines = !mdMode && caretLive && (visualMode || textSelectMode);
     if (caretLines && (key === 'j' || key === 'k')) {
       lineMotion(key === 'j' ? count : -count);
     } else if (key === 'j') {
@@ -5222,11 +5238,11 @@
       }
     } else if (key === 'l') {
       if (mdMode) mdComponentRef?.scrollByX(60 * count);
-      else if (cursor) charMotion(1);
+      else if (caretLive) charMotion(1);
       else mainEl.scrollBy(60 * count, 0);
     } else if (key === 'h') {
       if (mdMode) mdComponentRef?.scrollByX(-60 * count);
-      else if (cursor) charMotion(-1);
+      else if (caretLive) charMotion(-1);
       else mainEl.scrollBy(-60 * count, 0);
     } else if (e.ctrlKey && !e.metaKey && key === 'r') {
       e.preventDefault(); // zathura의 recolor 키 — 일반 r(페이지 회전) 분기보다 먼저 잡아야 한다
@@ -5323,21 +5339,22 @@
     } else if (key === 'Tab') {
       e.preventDefault(); // 기본 동작(다음 포커스 가능 요소로 이동)이 겹쳐 끼어들지 않게
       toggleSidebarFocus();
-    } else if (key === 'w' && cursor) {
+    } else if (key === 'w' && caretLive) {
       // 검색 이동은 텍스트 선택 모드가 아니어도 커서를 놓아주므로, w/W/b/B/e/E/y도 모드가
       // 아니라 커서 존재 여부로만 게이트한다 — 안 그러면 검색 후 바로 못 쓴다
       wordMotion(false, 'w');
-    } else if (key === 'W' && cursor) {
+    } else if (key === 'W' && caretLive) {
       wordMotion(true, 'w');
-    } else if (key === 'b' && cursor) {
+    } else if (key === 'b' && caretLive) {
       wordMotion(false, 'b');
-    } else if (key === 'B' && cursor) {
+    } else if (key === 'B' && caretLive) {
       wordMotion(true, 'b');
-    } else if (key === 'e' && cursor) {
+    } else if (key === 'e' && caretLive) {
       wordMotion(false, 'e');
-    } else if (key === 'E' && cursor) {
+    } else if (key === 'E' && caretLive) {
       wordMotion(true, 'e');
-    } else if (key === 'v' && cursor) {
+    } else if (key === 'v' && cursor && (visualMode || cursorInView())) {
+      // 선택 중이면 끄기, 커서가 보이면 선택 시작 — 커서가 화면 밖(이전 페이지 등)이면 아래로 내려가 지금 화면에 새로 놓는다
       visualMode = !visualMode;
       anchorIdx = cursor.idx; // 켜질 땐 지금 위치를 anchor로 고정, 꺼질 땐 선택을 캐럿으로 접음
     } else if (key === 'v') {
@@ -5490,7 +5507,9 @@
       text = selectionText().trim();
       page = selection.page;
       rect = pageCharCache.get(page)?.[Math.min(selection.startIdx, selection.endIdx)]?.rect ?? null;
-    } else if (cursor) {
+    } else if (cursor && cursorInView()) {
+      // 화면 밖에 남은 옛 커서(페이지를 옮긴 뒤 등)의 단어는 의도한 대상일 리 없어 무시한다 — 선택은 직접 고른
+      // 것이라 화면 밖이어도 그대로 쓴다
       const chars = pageCharCache.get(cursor.page) ?? [];
       let i = cursor.idx;
       while (i < chars.length && charClass(chars[i].ch) === 0) i++; // vim처럼 공백 위면 다음 단어
