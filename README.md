@@ -162,6 +162,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `v` | Place the cursor on the first visible word — then `w`/`b`/`e` to move by word, `j`/`k` by line, `^`/`$` to line start/end, `v` to select, `y` to copy, `*` to search |
 | `*` / `#` | Search forward / backward for the word under the cursor (or the selected text) |
 | `g*` / `g#` | Same, but also match inside words (`cat` → `category`) |
+| `/` then `Ctrl+R` `Ctrl+W` / `Ctrl+R` `Ctrl+A` | Insert the word under the cursor (or the selected text) into the search; `Ctrl+A` takes the whole non-blank chunk, e.g. `\emergencystretch` |
 | `:nohlsearch` / `:noh` | Clear search highlighting |
 
 ### Tabs

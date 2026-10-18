@@ -5173,6 +5173,7 @@
         return;
       }
       if (key === '*' || key === '#') { await starSearch(key === '*' ? 1 : -1, false, savedN ?? 1); return; }
+      if (key === 'i') { togglePageInvert(); return; } // gi — 페이지 다크 모드(go invert). :set invert와 같음
       if (key === 'Tab') {
         e.preventDefault(); // 기본 포커스 이동과 안 겹치게
         const idx = tabStates.indexOf(prevTabState);
@@ -5190,7 +5191,6 @@
       if (mdMode && /^[a-zA-Z]$/.test(key)) { statusMsg = t('status.md_marks_unsupported'); return; }
       if (/^[a-z]$/.test(key)) {
         marks[key] = { page: currentPage, y: currentPageY() };
-      if (key === 'i') { togglePageInvert(); return; } // gi — 페이지 다크 모드(go invert). :set invert와 같음
         if (filePath) saveMarks(filePath, marks);
         statusMsg = t('status.mark_set', { letter: key }); // 실제로 저장됐는지 눈에 보이게
         return;
@@ -5518,6 +5518,10 @@
     // 파워포인트 슬라이드 쇼도 발표 중엔 편집/검색 같은 조작을 안 주는 것과 같은 맥락으로
     // 프레젠테이션 중엔 검색 자체를 그냥 막는다(모드 전환으로 흐름을 끊지 않음).
     if (presentationMode) { statusMsg = t('status.presentation_unsupported_feature'); return; }
+    // Ctrl-R Ctrl-W가 넣을 단어는 /를 누른 "지금" 잡아 둔다 — 아래에서 사이드바가 열리면 연속 보기는 폭 맞춤으로
+    // 배율이 바뀌어 내용이 밀리고, 그러면 커서가 화면 밖으로 나가 cursorTarget()이 빈 값을 줬다
+    searchStartWord = cursorTarget().text;
+    searchStartWORD = cursorTarget(true).text;
     sidebarVisible = true;
     sidebarView = 'search';
     mode = 'search';
@@ -5535,11 +5539,38 @@
     return allSearchResults.flatMap(r => r.rects.map(rect => ({ page: r.page, rect })));
   }
 
-  // * / # / g* / g# — 선택이 있으면 선택한 텍스트(Neovim 0.10 방식), 없으면 커서 위치의 단어로 검색해
-  // 커서 다음(#은 이전) 일치 항목으로 간다. 결과는 일반 / 검색과 같아서 n/N·기록·하이라이트가 그대로 이어진다.
-  // 단어 경계(\<\>)는 영문 등 한 단어일 때만 — 한글/한자/가나는 조사·어미가 붙어 경계로 찾으면 놓친다.
-  /** @param {number} dir 1(*) | -1(#) @param {boolean} wholeWord @param {number} count */
-  async function starSearch(dir, wholeWord, count) {
+  // vim의 <cword>/<cWORD> 고르는 순서(:help star) — 같은 줄 안에서 ① 커서 아래 단어 글자 덩어리 ② 커서 뒤 첫 단어
+  // ③ 커서 아래 공백 아닌 덩어리 ④ 커서 뒤 첫 공백 아닌 덩어리. big(WORD)이면 ③④만 — TeX의 \emergencystretch처럼
+  // 기호가 붙은 덩어리 통째. 커서가 \ 위면 <cword>는 뒤따르는 emergencystretch, <cWORD>는 \emergencystretch.
+  /** @param {any[]} chars @param {number} idx @param {boolean} big @returns {[number, number] | null} */
+  function vimWordRange(chars, idx, big) {
+    const { lineOf } = charLines(chars, pageSizes[cursor?.page ?? 0]?.[0] ?? Infinity);
+    const line = lineOf[idx];
+    const inLine = (/** @type {number} */ i) => i >= 0 && i < chars.length && lineOf[i] === line;
+    const isWord = (/** @type {number} */ i) => charClass(chars[i].ch) === 1;
+    const nonBlank = (/** @type {number} */ i) => charClass(chars[i].ch) !== 0;
+    // vim처럼 문자 체계가 바뀌는 곳(라틴↔한글↔한자↔가나)에서도 끊는다 — 한국어는 조사가 붙어서
+    // "\emergencystretch가"를 통째로 잡으면 검색에 못 쓴다. WORD도 같이 끊는다(vim과 다른 점: 조사 붙은 덩어리는 쓸모없음)
+    const script = (/** @type {string} */ ch) => /\p{Script=Hangul}/u.test(ch) ? 1 : /\p{Script=Han}/u.test(ch) ? 2
+      : /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(ch) ? 3 : 0;
+    for (const pred of big ? [nonBlank] : [isWord, nonBlank]) {
+      let i = idx;
+      while (inLine(i) && !pred(i)) i++; // 커서 아래가 아니면 같은 줄의 다음 것
+      if (!inLine(i)) continue;
+      const sc = script(chars[i].ch);
+      const same = (/** @type {number} */ j) => inLine(j) && pred(j) && script(chars[j].ch) === sc;
+      let lo = i, hi = i;
+      while (same(lo - 1)) lo--;
+      while (same(hi + 1)) hi++;
+      return [lo, hi];
+    }
+    return null;
+  }
+
+  // * / #와 /의 Ctrl-R Ctrl-W(big이면 Ctrl-R Ctrl-A)가 쓰는 대상 — 선택이 있으면 선택한 텍스트, 없으면 화면에 보이는
+  // 커서 위치의 단어(vimWordRange 규칙).
+  /** @param {boolean} [big] @returns {{text: string, page: number, rect: number[] | null}} */
+  function cursorTarget(big = false) {
     let text = '', page = -1, rect = null;
     if (selection) {
       text = selectionText().trim();
@@ -5549,18 +5580,22 @@
       // 화면 밖에 남은 옛 커서(페이지를 옮긴 뒤 등)의 단어는 의도한 대상일 리 없어 무시한다 — 선택은 직접 고른
       // 것이라 화면 밖이어도 그대로 쓴다
       const chars = pageCharCache.get(cursor.page) ?? [];
-      let i = cursor.idx;
-      while (i < chars.length && charClass(chars[i].ch) === 0) i++; // vim처럼 공백 위면 다음 단어
-      if (i < chars.length) {
-        const cls = charClass(chars[i].ch);
-        let lo = i, hi = i;
-        while (lo > 0 && charClass(chars[lo - 1].ch) === cls) lo--;
-        while (hi + 1 < chars.length && charClass(chars[hi + 1].ch) === cls) hi++;
-        text = chars.slice(lo, hi + 1).map(c => c.ch).join('');
+      const range = chars.length ? vimWordRange(chars, cursor.idx, big) : null;
+      if (range) {
+        text = chars.slice(range[0], range[1] + 1).map(c => c.ch).join('');
         page = cursor.page;
-        rect = chars[i].rect;
+        rect = chars[range[0]].rect;
       }
     }
+    return { text, page, rect };
+  }
+
+  // * / # / g* / g# — 선택이 있으면 선택한 텍스트(Neovim 0.10 방식), 없으면 커서 위치의 단어로 검색해
+  // 커서 다음(#은 이전) 일치 항목으로 간다. 결과는 일반 / 검색과 같아서 n/N·기록·하이라이트가 그대로 이어진다.
+  // 단어 경계(\<\>)는 영문 등 한 단어일 때만 — 한글/한자/가나는 조사·어미가 붙어 경계로 찾으면 놓친다.
+  /** @param {number} dir 1(*) | -1(#) @param {boolean} wholeWord @param {number} count */
+  async function starSearch(dir, wholeWord, count) {
+    const { text, page, rect } = cursorTarget();
     if (!text) { statusMsg = t('status.star_no_word'); return; }
     const cjk = /[\p{Script=Hangul}\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(text);
     // 경계 검색만 정규식(\r) — 단어 글자만이라 이스케이프할 게 없다. 나머지는 일반 텍스트 검색이라 그대로
@@ -6082,9 +6117,30 @@
   }
 
   // ── Search input keydown (status bar <input> 전용) ────────
+  // vim의 Ctrl-R Ctrl-W — 검색 입력 중 커서 위치 단어(선택이 있으면 선택 텍스트)를 입력 커서 자리에 넣는다.
+  // Ctrl-R을 누르면 다음 키를 기다리고, Ctrl을 뗐다 다시 눌러도(modifier keydown) 대기는 유지한다.
+  let searchCtrlRPending = false;
+  let searchStartWord = ''; // / 를 누른 순간의 커서 단어/선택 텍스트 (focusSearchTab에서 채움)
+  let searchStartWORD = ''; // 같은 순간의 공백 기준 덩어리(Ctrl-R Ctrl-A용)
+  /** @param {HTMLInputElement} input @param {boolean} big Ctrl-A(WORD)면 true */
+  async function insertCursorWordIntoSearch(input, big) {
+    const text = big ? (searchStartWORD || cursorTarget(true).text) : (searchStartWord || cursorTarget().text);
+    if (!text) return;
+    const at = input.selectionStart ?? searchQuery.length, end = input.selectionEnd ?? at;
+    searchQuery = searchQuery.slice(0, at) + text + searchQuery.slice(end);
+    await tick();
+    input.setSelectionRange(at + text.length, at + text.length);
+  }
+
   function handleSearchInputKey(e) {
     // handleCmdInputKey와 같은 이유 — mode를 되돌리기 전에 버블링을 끊는다.
     e.stopPropagation();
+    if (searchCtrlRPending && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
+      searchCtrlRPending = false;
+      if (e.ctrlKey && !e.metaKey && (e.key === 'w' || e.key === 'a')) { e.preventDefault(); insertCursorWordIntoSearch(e.target, e.key === 'a'); return; }
+      // 다른 키면 Ctrl-R은 취소하고 그 키는 평소처럼 처리
+    }
+    if (e.ctrlKey && !e.metaKey && e.key === 'r') { e.preventDefault(); searchCtrlRPending = true; return; }
     if (e.key === 'Escape') { e.preventDefault(); mode = 'normal'; searchQuery = ''; e.target.blur(); }
     else if (e.key === 'Enter' && !e.isComposing) {
       e.preventDefault();
@@ -7214,6 +7270,7 @@
               <tr><td>v</td><td>{t('shortcuts.search.caret')}</td></tr>
               <tr><td>* / #</td><td>{t('shortcuts.search.star')}</td></tr>
               <tr><td>g* / g#</td><td>{t('shortcuts.search.gstar')}</td></tr>
+              <tr><td>/ … ⌃R ⌃W / ⌃R ⌃A</td><td>{t('shortcuts.search.ctrl_r_w')}</td></tr>
               <tr><td>...\c / ...\C</td><td>{t('shortcuts.search.case_suffix')}</td></tr>
               <tr><td>...\r / ...\R</td><td>{t('shortcuts.search.regex_suffix')}</td></tr>
               <tr><td>.*</td><td>{t('shortcuts.search.regex_toggle')}</td></tr>
