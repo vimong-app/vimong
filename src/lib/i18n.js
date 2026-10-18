@@ -132,6 +132,7 @@ const DICT = {
   'shortcuts.nav.scroll_updown': { ko: '위아래 스크롤', en: 'Scroll up/down', ja: '上下スクロール', 'zh-hans': '上下滚动', 'zh-hant': '上下捲動', es: 'Desplazar arriba/abajo' },
   'shortcuts.nav.scroll_leftright': { ko: '좌우 스크롤', en: 'Scroll left/right', ja: '左右スクロール', 'zh-hans': '左右滚动', 'zh-hant': '左右捲動', es: 'Desplazar izquierda/derecha' },
   'shortcuts.nav.half_page': { ko: '반 페이지 아래/위로 스크롤', en: 'Scroll half page down/up', ja: '半ページ下/上へスクロール', 'zh-hans': '向下/向上滚动半页', 'zh-hant': '向下/向上捲動半頁', es: 'Desplazar media página abajo/arriba' },
+  'shortcuts.nav.scroll_line': { ko: '커서는 두고 화면만 한 칸 아래 / 위로', en: 'Scroll the view one step down / up without moving the cursor', ja: 'カーソルはそのままで画面だけ1段下 / 上へ', 'zh-hans': '光标不动，仅将画面向下 / 向上滚动一格', 'zh-hant': '游標不動，僅將畫面向下 / 向上捲動一格', es: 'Desplazar la vista un paso abajo / arriba sin mover el cursor' },
   'shortcuts.nav.mark_set': { ko: '현재 위치를 마크로 저장', en: 'Save current position as a mark', ja: '現在位置をマークとして保存', 'zh-hans': '将当前位置保存为标记', 'zh-hant': '將目前位置儲存為標記', es: 'Guardar la posición actual como marca' },
   'shortcuts.nav.mark_goto': { ko: '저장한 마크로 이동', en: 'Jump to a saved mark', ja: '保存したマークへ移動', 'zh-hans': '跳转到已保存的标记', 'zh-hant': '跳至已儲存的標記', es: 'Ir a una marca guardada' },
   'shortcuts.nav.jump_toggle': { ko: '직전 점프 위치로 (반복하면 두 위치 왕복)', en: 'Back to where the last jump started (repeat to toggle)', ja: '直前のジャンプ元へ (繰り返すと2か所を往復)', 'zh-hans': '回到上次跳转的起点 (重复按可来回切换)', 'zh-hant': '回到上次跳轉的起點 (重複按可來回切換)', es: 'Volver al origen del último salto (repetir para alternar)' },

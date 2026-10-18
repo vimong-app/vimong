@@ -2151,6 +2151,28 @@
     return bottom > m.top && top < m.bottom;
   }
 
+  // j/k(커서 없을 때)와 Ctrl-E/Ctrl-Y가 같이 쓰는 한 칸 스크롤(60px × count). 연속 보기는 페이지 경계 없이
+  // 그대로 흘러가고, 한 페이지(쌍)씩 보기는 끝에 닿으면 다음/이전 페이지로 넘긴다(위로 넘길 땐 그 페이지 맨 아래부터)
+  /** @param {number} dir 1 아래 / -1 위 @param {number} count */
+  async function scrollStep(dir, count) {
+    if (mdMode) { mdComponentRef?.scrollBy(60 * dir * count); return; }
+    if (isContinuous(viewMode)) { mainEl.scrollBy(0, 60 * dir * count); return; }
+    const pageStep = isTwoUp(viewMode) ? 2 : 1;
+    if (dir > 0) {
+      const atBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 4;
+      if (atBottom && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep);
+      else mainEl.scrollBy(0, 60 * count);
+    } else {
+      const atTop = mainEl.scrollTop <= 4;
+      if (atTop && currentPage > 0) {
+        await gotoPage(currentPage - pageStep);
+        setTimeout(() => mainEl.scrollTo(0, mainEl.scrollHeight), 50);
+      } else {
+        mainEl.scrollBy(0, -60 * count);
+      }
+    }
+  }
+
   // 텍스트 선택 도구로 바꾸되 지금 커서는 살린다 — setToolMode가 커서를 지우므로 잠깐 들고 있다가 되돌린다
   function revealCursor() {
     const keep = { cursor, anchorIdx, visualMode };
@@ -5291,30 +5313,13 @@
     } else if (caretLines && (isCaret || key === '$')) {
       lineEdgeMotion(key === '$');
     } else if (key === 'j') {
-      if (mdMode) { mdComponentRef?.scrollBy(60 * count); }
-      // 연속 모드는 페이지 경계에서 안 끊기고 그대로 흘러가는 게 핵심이라 스냅 없이 스크롤만
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, 60 * count); }
-      else {
-        const atBottom = mainEl.scrollTop + mainEl.clientHeight >= mainEl.scrollHeight - 4;
-        if (atBottom && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep);
-        else mainEl.scrollBy(0, 60 * count);
-      }
+      await scrollStep(1, count);
     } else if (key === 'J') {
       if (!mdMode && currentPage < pageCount - 1) await gotoPage(currentPage + pageStep * count);
     } else if (key === 'K') {
       if (!mdMode && currentPage > 0) await gotoPage(currentPage - pageStep * count);
     } else if (key === 'k') {
-      if (mdMode) { mdComponentRef?.scrollBy(-60 * count); }
-      else if (isContinuous(viewMode)) { mainEl.scrollBy(0, -60 * count); }
-      else {
-        const atTop = mainEl.scrollTop <= 4;
-        if (atTop && currentPage > 0) {
-          await gotoPage(currentPage - pageStep);
-          setTimeout(() => mainEl.scrollTo(0, mainEl.scrollHeight), 50);
-        } else {
-          mainEl.scrollBy(0, -60 * count);
-        }
-      }
+      await scrollStep(-1, count);
     } else if (key === 'l') {
       if (mdMode) mdComponentRef?.scrollByX(60 * count);
       else if (caretLive) charMotion(1);
@@ -5327,6 +5332,11 @@
       // vim의 redo 자리로 비워 둔다(u로 되돌린 하이라이트 되살리기를 기대하는데 화면 색이 뒤집히면 안 되니
       // 다크 모드는 gi로 옮겼다). 아무것도 안 하지만 여기서 잡아야 아래 r(페이지 회전)로 안 떨어진다
       e.preventDefault();
+    } else if (e.ctrlKey && !e.metaKey && (key === 'e' || key === 'y')) {
+      // vim의 Ctrl-E/Ctrl-Y — 커서는 두고 화면만 한 칸(j/k 스크롤과 같은 60px). 커서가 보이면 j/k가 커서 이동이라
+      // 화면만 움직일 키가 필요했다. 커서가 화면 밖으로 나가면 기존 규칙대로 없는 것으로 친다(cursorInView)
+      e.preventDefault();
+      await scrollStep(key === 'e' ? 1 : -1, count); // j/k 스크롤과 같다 — 한 페이지씩 보기에선 끝에서 페이지도 넘긴다
     } else if (e.ctrlKey && !e.metaKey && key === 'o') {
       e.preventDefault(); // Cmd+O(파일 열기)와 안 겹치게 Ctrl만 받는다
       await jumpBack();
@@ -7274,6 +7284,7 @@
               <tr><td>j / k</td><td>{t('shortcuts.nav.scroll_updown')}</td></tr>
               <tr><td>h / l</td><td>{t('shortcuts.nav.scroll_leftright')}</td></tr>
               <tr><td>⌃D / ⌃U</td><td>{t('shortcuts.nav.half_page')}</td></tr>
+              <tr><td>⌃E / ⌃Y</td><td>{t('shortcuts.nav.scroll_line')}</td></tr>
               <tr><td>J / K</td><td>{t('shortcuts.nav.next_prev_page')}</td></tr>
               <tr><td>gg</td><td>{t('shortcuts.nav.first_page')}</td></tr>
               <tr><td>ga</td><td>{t('shortcuts.nav.char_value')}</td></tr>

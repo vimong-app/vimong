@@ -121,6 +121,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `j` / `k` | Scroll down / up |
 | `h` / `l` | Scroll left / right |
 | `Ctrl+D` / `Ctrl+U` | Scroll half page down/up |
+| `Ctrl+E` / `Ctrl+Y` | Scroll the view one step down / up without moving the cursor |
 | `J` / `K` | Next / previous page (`3J` = 3 pages ahead) |
 | `gg` / `G` | First / last page |
 | `nG` / `:n` | Go to page n (e.g. `5G`, `:5`) |
