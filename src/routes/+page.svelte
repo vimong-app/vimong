@@ -3350,8 +3350,17 @@
 
   function focusOnMount(node) { node.focus(); }
 
+  // 화면 갱신이 끝난 뒤 한 번 더 전체 선택 — ?로 열면 같은 순간 안내 문구(placeholder)가 "? …"로 바뀌는데, 그 갱신이
+  // 방금 한 선택을 풀고 커서를 끝으로 보내서 /와 달리 이전 검색어가 선택되지 않았다(WebKit). 그새 입력을 시작했으면 안 건드린다
+  function reselectSearchInputSoon() {
+    const before = searchQuery;
+    requestAnimationFrame(() => {
+      if (document.activeElement === searchInputEl && searchQuery === before) searchInputEl?.select();
+    });
+  }
+
   function focusOnSearchMount(node) {
-    if (wantSearchFocus) { node.focus(); node.select(); wantSearchFocus = false; } // select: focusSearchTab 주석 참고
+    if (wantSearchFocus) { node.focus(); node.select(); reselectSearchInputSoon(); wantSearchFocus = false; } // select: focusSearchTab 주석 참고
   }
 
   // ── 모달 탭 내비게이션 (gt / gT / ngt) ───────────────────
@@ -5170,7 +5179,7 @@
     }
 
     // Absorb browser defaults for vim nav keys + mode-trigger keys
-    if (['j','k','h','l','G','/',' ',':','[',']'].includes(key)) e.preventDefault();
+    if (['j','k','h','l','G','/','?',' ',':','[',']'].includes(key)) e.preventDefault();
 
     // ── z-prefix: zi / zo / z0 / zh / zv ──
     if (pendingPrefix === 'z') {
@@ -5412,12 +5421,12 @@
       // (focusSearchTab 주석 참고).
       if (presentationMode) { statusMsg = t('status.presentation_unsupported_feature'); }
       else { mode = 'command'; cmdInput = ''; cmdCompletion = null; }
-    } else if (key === '/') {
-      await focusSearchTab();
+    } else if (key === '/' || key === '?') {
+      await focusSearchTab(key === '?');
     } else if (key === 'n' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(count);
+      await gotoSearchMatch(searchBackward ? -count : count);
     } else if (key === 'N' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(-count);
+      await gotoSearchMatch(searchBackward ? count : -count);
     } else if (key === '*' || key === '#') {
       await starSearch(key === '*' ? 1 : -1, true, count);
     } else if (key === 's') {
@@ -5561,7 +5570,8 @@
   // 'search'인데 입력창은 언마운트돼 있어서, sidebarView만 보면 이미 떠 있다고
   // 착각해 stale한 searchInputEl.focus()를 부르고 실제 포커스는 안 가는 채로
   // mode='search'만 남아 이후 모든 vim 키가 막혀버리는 문제가 있었다.
-  async function focusSearchTab() {
+  // backward: ?로 열었으면 true(뒤로 검색). n/N 방향도 이걸 따른다(vim: n은 마지막 검색 방향, N은 반대)
+  async function focusSearchTab(backward = false) {
     if (pageCount === 0) return;
     // 프레젠테이션은 사이드바를 CSS로 숨기기만 하고 DOM은 그대로 마운트돼 있어서, 검색
     // 입력창이 이미 "마운트는 됐지만 display:none이라 실제로 포커스가 안 되는" 상태가
@@ -5570,6 +5580,7 @@
     // 파워포인트 슬라이드 쇼도 발표 중엔 편집/검색 같은 조작을 안 주는 것과 같은 맥락으로
     // 프레젠테이션 중엔 검색 자체를 그냥 막는다(모드 전환으로 흐름을 끊지 않음).
     if (presentationMode) { statusMsg = t('status.presentation_unsupported_feature'); return; }
+    searchBackward = backward;
     // Ctrl-R Ctrl-W가 넣을 단어는 /를 누른 "지금" 잡아 둔다 — 아래에서 사이드바가 열리면 연속 보기는 폭 맞춤으로
     // 배율이 바뀌어 내용이 밀리고, 그러면 커서가 화면 밖으로 나가 cursorTarget()이 빈 값을 줬다
     searchStartWord = cursorTarget().text;
@@ -5582,6 +5593,7 @@
       // Enter면 그대로 다시 검색, → 로 선택을 풀면 이어서 고칠 수 있다. 예전엔 커서가 끝에 있어 이어 붙었다
       searchInputEl.focus(); // 이미 마운트돼 있으면 바로 포커스
       searchInputEl.select();
+      reselectSearchInputSoon();
     } else {
       searchQuery = lastSearch;
       wantSearchFocus = true; // 새로 마운트될 때 use:focusOnSearchMount 가 포커스
@@ -5601,24 +5613,38 @@
     return flat.findIndex(m => m.page > page || (m.page === page && (m.rect[1] > y || (m.rect[1] === y && m.rect[0] > x))));
   }
 
+  // matchAfter의 반대 — (page, y, x)보다 앞에서 시작하는 마지막 결과(? 뒤로 검색용). 없으면 -1
+  /** @param {{page: number, rect: number[]}[]} flat @param {number} page @param {number} y @param {number} x */
+  function matchBefore(flat, page, y, x) {
+    for (let i = flat.length - 1; i >= 0; i--) {
+      const m = flat[i];
+      if (m.page < page || (m.page === page && (m.rect[1] < y || (m.rect[1] === y && m.rect[0] < x)))) return i;
+    }
+    return -1;
+  }
+
   // / Enter가 처음 갈 결과 — vim처럼 "지금 위치 다음"부터. 보이는 커서가 있으면 그 글자 바로 뒤(걸친 결과는 건너뜀),
   // 없으면 화면 맨 위(이미 화면에 보이는 결과부터). 뒤에 없으면 처음으로 돌아간다(wrapped=true).
   // ponytail: 화면 맨 위는 화면 위쪽에 걸친 첫 보이는 페이지 기준 — 두 페이지 나란히 보기에선 왼쪽 페이지만 본다
-  /** @param {{page: number, rect: number[]}[]} flat @returns {{idx: number, wrapped: boolean}} */
-  function firstMatchFromHere(flat) {
+  // backward(? 검색)면 거꾸로 — 커서/화면 맨 위보다 앞의 마지막 결과, 없으면 끝으로 돌아간다.
+  /** @param {{page: number, rect: number[]}[]} flat @param {boolean} backward @returns {{idx: number, wrapped: boolean}} */
+  function firstMatchFromHere(flat, backward) {
     let idx = -1;
     const c = cursor && cursorInView() ? pageCharCache.get(cursor.page)?.[cursor.idx] : null;
     if (c && cursor) {
-      idx = matchAfter(flat, cursor.page, c.rect[1], c.rect[0]);
+      idx = backward ? matchBefore(flat, cursor.page, c.rect[1], c.rect[0]) : matchAfter(flat, cursor.page, c.rect[1], c.rect[0]);
     } else if (mainEl) {
       const m = mainEl.getBoundingClientRect();
       const pages = [...visiblePageSet].sort((a, b) => a - b);
       const page = pages.find(p => (pageWrapEls[p]?.getBoundingClientRect().bottom ?? -Infinity) > m.top) ?? currentPage;
       const el = pageWrapEls[page];
       const viewTop = el ? Math.max(0, (m.top - el.getBoundingClientRect().top) / scale) : 0;
-      idx = matchAfter(flat, page, viewTop - 0.01, -Infinity); // 화면 맨 위 줄에 걸친 결과도 포함
+      idx = backward
+        ? matchBefore(flat, page, viewTop - 0.01, -Infinity) // 화면 위로 넘어간 쪽에서 가장 가까운 결과
+        : matchAfter(flat, page, viewTop - 0.01, -Infinity); // 화면 맨 위 줄에 걸친 결과도 포함
     }
-    return idx === -1 ? { idx: 0, wrapped: true } : { idx, wrapped: false };
+    if (idx !== -1) return { idx, wrapped: false };
+    return { idx: backward ? flat.length - 1 : 0, wrapped: true };
   }
 
   // vim의 <cword>/<cWORD> 고르는 순서(:help star) — 같은 줄 안에서 ① 커서 아래 단어 글자 덩어리 ② 커서 뒤 첫 단어
@@ -5693,6 +5719,7 @@
       cur = after === -1 ? (dir > 0 ? flat.length - 1 : flat.length) : (dir > 0 ? after - 1 : after);
     }
     searchResultIdx = cur;
+    searchBackward = dir < 0; // vim처럼 #이면 이후 n도 뒤로
     await gotoSearchMatch(dir * count);
   }
 
@@ -6200,6 +6227,7 @@
   // vim의 Ctrl-R Ctrl-W — 검색 입력 중 커서 위치 단어(선택이 있으면 선택 텍스트)를 입력 커서 자리에 넣는다.
   // Ctrl-R을 누르면 다음 키를 기다리고, Ctrl을 뗐다 다시 눌러도(modifier keydown) 대기는 유지한다.
   let searchCtrlRPending = false;
+  let searchBackward = $state(false); // 마지막 검색 방향 — ?·#이면 true. n은 이 방향, N은 반대 (vim과 같음)
   let searchStartWord = ''; // / 를 누른 순간의 커서 단어/선택 텍스트 (focusSearchTab에서 채움)
   let searchStartWORD = ''; // 같은 순간의 공백 기준 덩어리(Ctrl-R Ctrl-A용)
   /** @param {HTMLInputElement} input @param {boolean} big Ctrl-A(WORD)면 true */
@@ -6269,15 +6297,15 @@
         searchResultIdx = 0;
         sidebarView = 'search';
         const totalHits = results.reduce((s, r) => s + r.hit_count, 0);
-        statusMsg = `/${query}  [${totalHits} hit${totalHits > 1 ? 's' : ''} on ${results.length} page${results.length > 1 ? 's' : ''}]`;
+        statusMsg = `${searchBackward ? '?' : '/'}${query}  [${totalHits} hit${totalHits > 1 ? 's' : ''} on ${results.length} page${results.length > 1 ? 's' : ''}]`;
         if (!jump) return;
         // 페이지 맨 위가 아니라 첫 결과 위치로 가서 그 단어에 커서를 놓는다(n과 같은 경로, 점프리스트에도 남음) —
         // 예전엔 페이지로만 가고 커서를 안 놓아서, 검색 직후 w/v가 엉뚱하게 동작했다
         // 문서 맨 앞이 아니라 지금 위치 다음 결과부터(vim의 /). 사이드바 목록·하이라이트는 그대로 문서 전체
-        const { idx: firstIdx, wrapped } = firstMatchFromHere(flatSearchMatches());
+        const { idx: firstIdx, wrapped } = firstMatchFromHere(flatSearchMatches(), searchBackward);
         searchResultIdx = firstIdx - 1; // gotoSearchMatch(1)이 firstIdx로
         await gotoSearchMatch(1);
-        if (wrapped) statusMsg += '  ' + t('status.search_wrapped');
+        if (wrapped) statusMsg += '  ' + t(searchBackward ? 'status.search_wrapped_top' : 'status.search_wrapped');
         const firstPageIdx = Math.max(0, results.findIndex(r => r.page === flatSearchMatches()[firstIdx]?.page));
         // 검색 직후 바로 j/k로 결과를 훑을 수 있게 사이드바 첫 결과에 포커스 —
         // allSearchResults가 방금 바뀌어서 검색결과 DOM(searchResultEls)이 아직 그
@@ -6645,7 +6673,7 @@
               onblur={() => { if (mode === 'search') mode = 'normal'; }}
               autocomplete="off"
               spellcheck="false"
-              placeholder={t('search.placeholder')}
+              placeholder={(searchBackward ? '? ' : '') + t('search.placeholder')}
             />
             <button
               class="case-toggle"
@@ -7365,6 +7393,7 @@
           {:else if shortcutsTab === 'search'}
             <table><tbody>
               <tr><td>/ / ⌘F</td><td>{t('shortcuts.search.search_key_desc')}</td></tr>
+              <tr><td>?</td><td>{t('shortcuts.search.backward')}</td></tr>
               <tr><td>n / N</td><td>{t('shortcuts.search.next_prev')}</td></tr>
               <tr><td>v</td><td>{t('shortcuts.search.caret')}</td></tr>
               <tr><td>* / #</td><td>{t('shortcuts.search.star')}</td></tr>

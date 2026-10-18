@@ -159,6 +159,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `:export [-m] [-p] [pagespec] <path>` / `Cmd+Shift+E` | Export as image (PNG/JPG) or PDF |
 | `Cmd+I` | Document info |
 | `/` / `Cmd+F` | Search (Korean/Japanese/Chinese supported) |
+| `?` | Search backward (upward) — then `n` goes up and `N` goes down |
 | `n` / `N` | Next / previous match |
 | `v` | Place the cursor on the first visible word — then `w`/`b`/`e` to move by word, `j`/`k` by line, `^`/`$` to line start/end, `v` to select, `y` to copy, `*` to search |
 | `*` / `#` | Search forward / backward for the word under the cursor (or the selected text) |
