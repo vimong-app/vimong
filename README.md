@@ -130,6 +130,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `:delm[arks] a b-d A` / `:delm!` | Delete marks (`!` deletes all a–z in this file) |
 | `Ctrl+O` / `Ctrl+I` | Jump to older / newer position — across files too, switching to or opening the file |
 | `f` | Show link hints, then jump |
+| `s` | Label each visible line — type a label to move the cursor to that line (extends a selection while selecting) |
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
 | `p` | Presentation mode (fullscreen slideshow) |
 | `Ctrl+R` / `:set invert` | Toggle page dark mode (invert page colors) |

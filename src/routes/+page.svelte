@@ -2717,6 +2717,10 @@
   let pageLinks = $state([]); // { rect, page, uri, label }[] for current page
   let hintMode = $state(false);
   let hintBuf = '';
+  // 줄 힌트(s) — 링크 힌트와 같은 라벨/입력 방식으로, 보이는 줄마다 라벨을 붙여 커서를 그 줄 첫 글자로
+  /** @type {{page: number, idx: number, rect: number[], label: string}[]} */
+  let lineHints = $state([]);
+  let lineHintMode = $state(false);
 
   // ── Vim mode ───────────────────────────────────────────────
   let mode = $state('normal'); // 'normal' | 'command' | 'search'
@@ -3004,7 +3008,7 @@
   async function switchToTabInner(idx) {
     idx = Math.max(0, Math.min(idx, tabLabels.length - 1));
     if (idx === currentTabIdx) return;
-    hintMode = false; pageLinks = [];
+    hintMode = false; pageLinks = []; lineHintMode = false;
     ++thumbVersion; // 현재 탭 썸네일 로드 중단
     resetMainViewState();
     saveTab();
@@ -3104,7 +3108,7 @@
     // 안 되돌리면 새 탭에서 mode가 'search'/'command'로 남아 handleKeydown이 맨 앞에서 바로
     // return 해버려서 키보드가 완전히 안 먹는다(마우스는 이 검사를 안 거치니 멀쩡해 보임).
     mode = 'normal';
-    hintMode = false; pageLinks = [];
+    hintMode = false; pageLinks = []; lineHintMode = false;
     ++thumbVersion;
     resetMainViewState();
     saveTab();
@@ -3160,7 +3164,7 @@
   async function closeTabConfirmedInner(idx) {
     // newTab()과 같은 이유(Cmd+W도 네이티브 메뉴 단축키) — mode 스택 문제
     mode = 'normal';
-    hintMode = false; pageLinks = [];
+    hintMode = false; pageLinks = []; lineHintMode = false;
     ++thumbVersion;
     resetMainViewState();
     if (tabLabels.length === 1) {
@@ -4451,6 +4455,40 @@
     hintMode = true;
   }
 
+  // s — 지금 페이지에서 화면에 보이는 줄마다 라벨. 라벨을 치면 그 줄 첫 글자로 커서(선택 중이면 범위 확장).
+  // v처럼 손 도구면 텍스트 선택 도구로 바꾼다(커서가 그 도구에서만 그려짐). 줄 나누기는 j/k와 같은 charLines.
+  // ponytail: 지금 페이지만 — 두 페이지가 동시에 보이면 다른 페이지 줄은 빠진다
+  async function activateLineHints() {
+    if (hwpMode) { statusMsg = t('status.hwp_unsupported_feature'); return; }
+    if (mdMode) { statusMsg = t('status.md_unsupported_feature'); return; }
+    if (!filePath || !mainEl) return;
+    if (!textSelectMode) setToolMode('text');
+    const page = currentPage;
+    await ensureCharsLoaded(page);
+    const chars = pageCharCache.get(page) ?? [];
+    const el = pageWrapEls[page];
+    if (!el) return;
+    const { lines } = charLines(chars, pageSizes[page]?.[0] ?? Infinity);
+    const p = el.getBoundingClientRect(), m = mainEl.getBoundingClientRect();
+    const viewTop = (m.top - p.top) / scale, viewBottom = (m.bottom - p.top) / scale;
+    const visible = lines.filter(l => { const r = chars[l[0]].rect; return r[1] >= viewTop && r[3] <= viewBottom; });
+    if (visible.length === 0) { statusMsg = t('status.caret_no_text'); return; }
+    const labels = makeHintLabels(visible.length);
+    lineHints = visible.map((l, i) => ({ page, idx: l[0], rect: chars[l[0]].rect, label: labels[i] }));
+    hintBuf = '';
+    lineHintMode = true;
+  }
+
+  /** @param {{page: number, idx: number}} h */
+  function finishLineHint(h) {
+    lineHintMode = false;
+    lineHints = [];
+    // 같은 페이지에서 선택 중이면 anchor는 그대로 두고 커서만 옮겨 범위를 늘린다(j/k와 같은 규칙)
+    if (visualMode && cursor && cursor.page === h.page) { if (anchorIdx === null) anchorIdx = cursor.idx; }
+    else { anchorIdx = h.idx; visualMode = false; }
+    cursor = { page: h.page, idx: h.idx };
+  }
+
   // 목적지를 못 찾은 내부 참조(각주 하이퍼타겟이 문서에 아예 등록 안 돼 있는 경우 등)의
   // 최선의 대안 — 정확한 좌표는 알 길이 없지만, 책 형태 PDF는 각주가 거의 항상 같은
   // 페이지 하단에 있으므로 그쪽으로 스크롤해 보이게 한다.
@@ -4620,12 +4658,25 @@
     if (hintMode) {
       if (['Shift','Control','Alt','Meta'].includes(key)) return;
       e.preventDefault();
-      if (key === 'Escape') { hintMode = false; pageLinks = []; return; }
+      if (key === 'Escape') { hintMode = false; pageLinks = []; lineHintMode = false; return; }
       hintBuf += key;
       const matches = pageLinks.filter(l => l.label.startsWith(hintBuf));
       const exact = matches.find(l => l.label === hintBuf);
       if (exact) await followLink(exact);
-      else if (matches.length === 0) { hintMode = false; pageLinks = []; }
+      else if (matches.length === 0) { hintMode = false; pageLinks = []; lineHintMode = false; }
+      return;
+    }
+
+    // ── line hint mode: 's'로 진입, 라벨 입력으로 그 줄로 커서 — 링크 힌트와 같은 입력 규칙 ──
+    if (lineHintMode) {
+      if (['Shift','Control','Alt','Meta'].includes(key)) return;
+      e.preventDefault();
+      if (key === 'Escape') { lineHintMode = false; lineHints = []; return; } // 라벨만 닫고 커서는 그대로
+      hintBuf += key;
+      const matches = lineHints.filter(h => h.label.startsWith(hintBuf));
+      const exact = matches.find(h => h.label === hintBuf);
+      if (exact) finishLineHint(exact);
+      else if (matches.length === 0) { lineHintMode = false; lineHints = []; }
       return;
     }
 
@@ -5243,6 +5294,8 @@
       await gotoSearchMatch(-count);
     } else if (key === '*' || key === '#') {
       await starSearch(key === '*' ? 1 : -1, true, count);
+    } else if (key === 's') {
+      await activateLineHints();
     } else if (key === ']') {
       await cycleSidebarView(1);
     } else if (key === '[') {
@@ -6586,6 +6639,11 @@
             <div class="highlight" class:active={r === activeMatchRect} style="left:{r[0]*scale}px;top:{r[1]*scale}px;width:{(r[2]-r[0])*scale}px;height:{(r[3]-r[1])*scale}px"></div>
           {/each}
         {/if}
+        {#if lineHintMode}
+          {#each lineHints.filter(h => h.page === i) as h}
+            <div class="link-hint line-hint" style="left:{h.rect[0]*scale}px;top:{h.rect[1]*scale}px">{h.label}</div>
+          {/each}
+        {/if}
         {#if hintMode}
           {#each pageLinks.filter(l => l.srcPage === i) as l}
             <div class="link-hint" style="left:{l.rect[0]*scale}px;top:{l.rect[1]*scale}px">{l.label}</div>
@@ -7039,6 +7097,7 @@
               <tr><td>m{'{A-Z}'} / '{'{A-Z}'}</td><td>{t('shortcuts.nav.global_mark')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
+              <tr><td>s</td><td>{t('shortcuts.nav.line_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
               <tr><td>u / ⌘Z</td><td>{t('shortcuts.nav.undo_highlight')}</td></tr>
               <tr><td>{t('shortcuts.nav.synctex_key')}</td><td>{t('shortcuts.nav.synctex')}</td></tr>
@@ -8368,6 +8427,8 @@
     transform: translate(-2px, -2px);
     z-index: 10;
   }
+  /* 줄 힌트는 줄 첫 단어를 가리지 않게 줄 왼쪽 바깥에 붙인다 */
+  .link-hint.line-hint { transform: translate(calc(-100% - 3px), -1px); }
 
   .welcome {
     display: flex;
