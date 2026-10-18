@@ -5173,6 +5173,7 @@
       if (mdMode && /^[a-zA-Z]$/.test(key)) { statusMsg = t('status.md_marks_unsupported'); return; }
       if (/^[a-z]$/.test(key)) {
         marks[key] = { page: currentPage, y: currentPageY() };
+      if (key === 'i') { togglePageInvert(); return; } // gi — 페이지 다크 모드(go invert). :set invert와 같음
         if (filePath) saveMarks(filePath, marks);
         statusMsg = t('status.mark_set', { letter: key }); // 실제로 저장됐는지 눈에 보이게
         return;
@@ -5264,8 +5265,9 @@
       else if (caretLive) charMotion(-1);
       else mainEl.scrollBy(-60 * count, 0);
     } else if (e.ctrlKey && !e.metaKey && key === 'r') {
-      e.preventDefault(); // zathura의 recolor 키 — 일반 r(페이지 회전) 분기보다 먼저 잡아야 한다
-      togglePageInvert();
+      // vim의 redo 자리로 비워 둔다(u로 되돌린 하이라이트 되살리기를 기대하는데 화면 색이 뒤집히면 안 되니
+      // 다크 모드는 gi로 옮겼다). 아무것도 안 하지만 여기서 잡아야 아래 r(페이지 회전)로 안 떨어진다
+      e.preventDefault();
     } else if (e.ctrlKey && !e.metaKey && key === 'o') {
       e.preventDefault(); // Cmd+O(파일 열기)와 안 겹치게 Ctrl만 받는다
       await jumpBack();
@@ -7166,7 +7168,7 @@
               <tr><td>{t('shortcuts.nav.toc_hl_key')}</td><td>{t('shortcuts.nav.toc_hl_desc')}</td></tr>
               <tr><td>⌘⇧T</td><td>{t('shortcuts.nav.toggle_sidebar')}</td></tr>
               <tr><td>p</td><td>{t('shortcuts.nav.presentation')}</td></tr>
-              <tr><td>⌃R</td><td>{t('shortcuts.nav.page_invert')}</td></tr>
+              <tr><td>gi</td><td>{t('shortcuts.nav.page_invert')}</td></tr>
               <tr><td>⌃⌘F</td><td>{t('shortcuts.nav.fullscreen')}</td></tr>
             </tbody></table>
           {:else if shortcutsTab === 'zoom'}
