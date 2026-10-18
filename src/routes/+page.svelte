@@ -6165,6 +6165,12 @@
   /** @param {HTMLInputElement} input @param {boolean} big Ctrl-A(WORD)면 true */
   async function insertCursorWordIntoSearch(input, big) {
     const text = big ? (searchStartWORD || cursorTarget(true).text) : (searchStartWord || cursorTarget().text);
+    await insertIntoSearch(input, text);
+  }
+
+  // 검색 입력창의 입력 커서 자리에 끼워 넣는다(선택 영역이 있으면 그걸 바꿈) — Ctrl-R Ctrl-W와 Cmd+V가 같이 쓴다
+  /** @param {HTMLInputElement} input @param {string} text */
+  async function insertIntoSearch(input, text) {
     if (!text) return;
     const at = input.selectionStart ?? searchQuery.length, end = input.selectionEnd ?? at;
     searchQuery = searchQuery.slice(0, at) + text + searchQuery.slice(end);
@@ -6193,7 +6199,9 @@
     else if ((e.metaKey || e.ctrlKey) && e.key === 'v') {
       // handleCmdInputKey와 같은 이유 — 이 입력창에서도 네이티브 붙여넣기가 안 먹는다
       e.preventDefault();
-      clipboardRead().then(text => { if (text) searchQuery += text.trimEnd(); });
+      // 맨 끝이 아니라 입력 커서 자리에 넣는다(일반 입력창처럼)
+      const input = e.currentTarget;
+      clipboardRead().then(text => { if (text) insertIntoSearch(input, text.trimEnd()); });
     }
     // ⌘⇧] / ⌘⇧[ 탭 전환 — 위 stopPropagation 때문에 전역 핸들러까지 안 올라가서 이 입력창에
     // 포커스가 있는 동안엔 안 먹혔다. handleKeydown의 같은 분기와 동일하게 처리한다.
