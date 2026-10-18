@@ -2028,10 +2028,25 @@
     return 2;
   }
 
+  // 문자 체계 — 한글 1, 한자 2, 가나 3, 그 외(라틴 등) 0. vim처럼 체계가 바뀌는 곳도 단어 경계로 본다:
+  // 한국어는 조사가 바로 붙어서("\emergencystretch가", "Bin이") 안 끊으면 w/e/*가 조사까지 한 단어로 잡는다
+  /** @param {string} ch */
+  function scriptOf(ch) {
+    return /\p{Script=Hangul}/u.test(ch) ? 1 : /\p{Script=Han}/u.test(ch) ? 2
+      : /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(ch) ? 3 : 0;
+  }
+
+  // w/b/e용 글자 분류 — charClass에서 단어 글자(1)를 문자 체계별로 더 나눈다(같은 값끼리만 한 단어)
+  /** @param {string} ch */
+  function motionClass(ch) {
+    const c = charClass(ch);
+    return c === 1 ? 10 + scriptOf(ch) : c;
+  }
+
   // 실제 vim의 "다음 단어 시작"에 착지하는 원래 값 — 커서만 옮길 때(선택 없이) 쓴다
   function vimWordLanding(chars, idx, big) {
     const n = chars.length;
-    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : charClass;
+    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : motionClass;
     let i = Math.min(Math.max(idx, 0), n - 1);
     const startCls = cls(chars[i].ch);
     if (startCls !== 0) {
@@ -2045,6 +2060,8 @@
   function motionWordForward(chars, idx, big) {
     const n = chars.length;
     if (n === 0 || idx >= n - 1) return idx;
+    // 선택 확장은 커서가 "다음 단어 앞 글자"에 머무는 방식이라 idx+1부터 봐야 다음 w에서 앞으로 나아간다
+    // (커서만 옮기는 wordMotion은 지금 글자부터 본다 — 거기서 +1이면 한 글자 단어 뒤 단어를 건너뜀)
     const landing = vimWordLanding(chars, idx + 1, big);
     if (landing >= n - 1) return n - 1; // 다음 단어가 없음 — 페이지 끝까지 선택
     return Math.max(idx, landing - 1);
@@ -2053,7 +2070,7 @@
   // 이전 단어의 시작으로 이동 — 커서 단독 이동/선택 확장 둘 다 이 값을 그대로 쓴다
   // (뒤로 갈 땐 착지 지점 자체가 이미 "그 단어의 시작"이라 exclusive 보정이 필요 없다)
   function motionWordBackward(chars, idx, big) {
-    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : charClass;
+    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : motionClass;
     let i = idx - 1;
     if (i < 0) return 0;
     while (i > 0 && cls(chars[i].ch) === 0) i--;
@@ -2067,7 +2084,7 @@
   // 커서 단독 이동/선택 확장 둘 다 이 값을 그대로 쓴다(exclusive 보정 불필요)
   function motionWordEnd(chars, idx, big) {
     const n = chars.length;
-    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : charClass;
+    const cls = big ? (c => (/\s/.test(c) ? 0 : 1)) : motionClass;
     let i = idx + 1;
     if (i >= n) return n - 1;
     while (i < n && cls(chars[i].ch) === 0) i++;
@@ -2093,7 +2110,7 @@
       // 실제 vim처럼 그냥 커서만(선택 없이) 이동 — anchor도 같이 따라간다
       const idx = dir === 'b' ? motionWordBackward(chars, cursor.idx, big)
         : dir === 'e' ? motionWordEnd(chars, cursor.idx, big)
-        : vimWordLanding(chars, cursor.idx + 1, big);
+        : vimWordLanding(chars, cursor.idx, big); // 지금 글자부터 — +1이면 한 글자 단어 뒤 단어를 건너뜀
       anchorIdx = idx;
       cursor = { page: cursor.page, idx };
     }
@@ -5551,14 +5568,12 @@
     const nonBlank = (/** @type {number} */ i) => charClass(chars[i].ch) !== 0;
     // vim처럼 문자 체계가 바뀌는 곳(라틴↔한글↔한자↔가나)에서도 끊는다 — 한국어는 조사가 붙어서
     // "\emergencystretch가"를 통째로 잡으면 검색에 못 쓴다. WORD도 같이 끊는다(vim과 다른 점: 조사 붙은 덩어리는 쓸모없음)
-    const script = (/** @type {string} */ ch) => /\p{Script=Hangul}/u.test(ch) ? 1 : /\p{Script=Han}/u.test(ch) ? 2
-      : /[\p{Script=Hiragana}\p{Script=Katakana}]/u.test(ch) ? 3 : 0;
     for (const pred of big ? [nonBlank] : [isWord, nonBlank]) {
       let i = idx;
       while (inLine(i) && !pred(i)) i++; // 커서 아래가 아니면 같은 줄의 다음 것
       if (!inLine(i)) continue;
-      const sc = script(chars[i].ch);
-      const same = (/** @type {number} */ j) => inLine(j) && pred(j) && script(chars[j].ch) === sc;
+      const sc = scriptOf(chars[i].ch);
+      const same = (/** @type {number} */ j) => inLine(j) && pred(j) && scriptOf(chars[j].ch) === sc;
       let lo = i, hi = i;
       while (same(lo - 1)) lo--;
       while (same(hi + 1)) hi++;
