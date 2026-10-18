@@ -4844,6 +4844,9 @@
       // preventDefault 없이 두면 WKWebView가 네이티브 cancelOperation:으로 넘겨서,
       // 전체화면 상태일 때 macOS가 이걸 "전체화면 종료"로 처리해버린다.
       e.preventDefault();
+      // 기다리던 프리픽스(f/F·m·'·g·z)나 숫자 카운트가 있으면 Esc는 그것만 취소한다(vim과 같음) — 안 그러면 Esc가 다른
+      // 걸 닫고 돌아간 뒤에도 프리픽스가 남아, 다음 키가 엉뚱하게 소비됐다(예: m → Esc → a 가 마크 a를 저장)
+      if (pendingPrefix || numBuf) { pendingPrefix = ''; pendingN = null; numBuf = ''; return; }
       if (presentationMode) { await togglePresentation(); return; }
       // 설정 모달 위에 겹쳐 뜨는 팝업이라, 한 번 누르면 이것부터 닫히고 설정 모달은 남는다
       if (showTexshopHelp) { closeTexshopHelp(); return; }
