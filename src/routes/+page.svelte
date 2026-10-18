@@ -3351,7 +3351,7 @@
   function focusOnMount(node) { node.focus(); }
 
   function focusOnSearchMount(node) {
-    if (wantSearchFocus) { node.focus(); wantSearchFocus = false; }
+    if (wantSearchFocus) { node.focus(); node.select(); wantSearchFocus = false; } // select: focusSearchTab 주석 참고
   }
 
   // ── 모달 탭 내비게이션 (gt / gT / ngt) ───────────────────
@@ -5578,7 +5578,10 @@
     sidebarView = 'search';
     mode = 'search';
     if (searchInputEl) {
+      // 이전 검색어는 전체 선택한 채로 연다(브라우저 찾기처럼) — 바로 치거나 Ctrl-R Ctrl-W를 누르면 대체되고,
+      // Enter면 그대로 다시 검색, → 로 선택을 풀면 이어서 고칠 수 있다. 예전엔 커서가 끝에 있어 이어 붙었다
       searchInputEl.focus(); // 이미 마운트돼 있으면 바로 포커스
+      searchInputEl.select();
     } else {
       searchQuery = lastSearch;
       wantSearchFocus = true; // 새로 마운트될 때 use:focusOnSearchMount 가 포커스
