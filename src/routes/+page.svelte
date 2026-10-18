@@ -6671,7 +6671,8 @@
           {/if}
         {/if}
         {#if textSelectMode && caretRect && cursor?.page === i}
-          <div class="text-caret" style="left:{caretRect[0]*scale}px;top:{caretRect[1]*scale}px;height:{(caretRect[3]-caretRect[1])*scale}px"></div>
+          <!-- vim 일반 모드처럼 글자를 덮는 블록 커서 — 왼쪽 막대로 그리면 e(단어 끝 글자에 놓임)가 마지막 글자 "앞"에 있는 것처럼 보였다 -->
+          <div class="text-caret" style="left:{caretRect[0]*scale}px;top:{caretRect[1]*scale}px;width:{Math.max((caretRect[2]-caretRect[0])*scale, 2)}px;height:{(caretRect[3]-caretRect[1])*scale}px"></div>
         {/if}
         {#if i === currentPage && hlsearchOn}
           {#each pageHighlights as r}
@@ -8435,8 +8436,7 @@
 
   .text-caret {
     position: absolute;
-    width: 2px;
-    background: #4e8fc7;
+    background: rgba(78, 143, 199, 0.45); /* 블록이라 반투명 — 아래 글자가 보이게 */
     pointer-events: none;
     animation: blink 1s step-end infinite;
   }
