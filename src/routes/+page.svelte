@@ -1342,9 +1342,24 @@
     return { page: cursor.page, startIdx: anchorIdx, endIdx: cursor.idx };
   });
 
-  async function ensureCharsLoaded(i) {
-    if (pageCharCache.has(i)) return;
-    pageCharCache.set(i, []); // 중복 요청 방지용 placeholder
+  // 로딩 중인 페이지의 Promise — 자리표시([])만 보고 바로 돌아가면, 먼저 시작된 로딩(예: 텍스트 선택
+  // 도구로 바꿀 때 setToolMode가 기다리지 않고 건 것)이 끝나기 전에 빈 글자 목록을 받는다. v가 첫 번에
+  // "텍스트 없음"으로 끝나고 두 번째에야 되던 원인. 진행 중이면 그 Promise를 같이 기다리게 한다.
+  /** @type {Map<number, Promise<void>>} */
+  const charLoads = new Map();
+  /** @param {number} i */
+  function ensureCharsLoaded(i) {
+    const pending = charLoads.get(i);
+    if (pending) return pending;
+    if (pageCharCache.has(i)) return Promise.resolve();
+    const p = loadPageChars(i).finally(() => { if (charLoads.get(i) === p) charLoads.delete(i); });
+    charLoads.set(i, p);
+    return p;
+  }
+
+  /** @param {number} i */
+  async function loadPageChars(i) {
+    pageCharCache.set(i, []); // 동기로 읽는 쪽(선택 그리기 등)을 위한 자리표시
     // 텍스트 레이어가 없는 페이지는 macOS에서 OCR로 폴백되는데 몇 초 걸릴 수 있다 — 그동안
     // 드래그해도 조용히 아무 반응이 없어 보여서(캐시가 비어 있으니) 오래 걸릴 때만 안내한다
     const slowTimer = setTimeout(() => { statusMsg = t('status.ocr_running'); }, 400);
@@ -2303,6 +2318,7 @@
     paintedPages.clear();
     paintedPagesBytes = 0;
     pageCharCache.clear();
+    charLoads.clear();
     anchorIdx = null;
     cursor = null;
     visualMode = false;
