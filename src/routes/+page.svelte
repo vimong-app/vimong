@@ -4422,16 +4422,16 @@
   // ── Link hints (f) ───────────────────────────────────────────
   const HINT_CHARS = 'asdfghjklqwertyuiopzxcvbnm';
 
+  // 한 글자·두 글자 라벨을 섞는다(Vimium/EasyMotion 방식) — 뒤쪽 k개 글자만 두 글자 라벨의 첫 글자로
+  // 쓰고 나머지는 한 글자 라벨로 남긴다. 한 글자 라벨이 두 글자의 첫 글자와 겹치지 않아 입력이 모호하지
+  // 않다. 개수는 (26-k) + 26k = 26 + 25k ≥ n 이 되는 최소 k. 앞쪽(먼저 넘긴 항목)이 한 글자를 받는다.
+  /** @param {number} n */
   function makeHintLabels(n) {
-    if (n <= HINT_CHARS.length) return HINT_CHARS.slice(0, n).split('');
-    const labels = [];
-    for (const a of HINT_CHARS) {
-      for (const b of HINT_CHARS) {
-        labels.push(a + b);
-        if (labels.length === n) return labels;
-      }
-    }
-    return labels;
+    const N = HINT_CHARS.length;
+    const k = Math.min(N, Math.max(0, Math.ceil((n - N) / (N - 1))));
+    const labels = HINT_CHARS.slice(0, N - k).split('');
+    for (const a of HINT_CHARS.slice(N - k)) for (const b of HINT_CHARS) labels.push(a + b);
+    return labels.slice(0, n);
   }
 
   async function activateLinkHints() {
@@ -4473,8 +4473,12 @@
     const viewTop = (m.top - p.top) / scale, viewBottom = (m.bottom - p.top) / scale;
     const visible = lines.filter(l => { const r = chars[l[0]].rect; return r[1] >= viewTop && r[3] <= viewBottom; });
     if (visible.length === 0) { statusMsg = t('status.caret_no_text'); return; }
-    const labels = makeHintLabels(visible.length);
-    lineHints = visible.map((l, i) => ({ page, idx: l[0], rect: chars[l[0]].rect, label: labels[i] }));
+    // 한 글자 라벨은 커서와 가까운 줄부터(커서가 없거나 다른 페이지면 화면 위쪽 줄부터) — 자주 가는 근처가 가장 빠르게
+    const { lineOf } = charLines(chars, pageSizes[page]?.[0] ?? Infinity);
+    const ref = cursor?.page === page ? lineOf[cursor.idx] ?? 0 : lines.indexOf(visible[0]);
+    const byDistance = [...visible].sort((a, b) => Math.abs(lines.indexOf(a) - ref) - Math.abs(lines.indexOf(b) - ref));
+    const labels = makeHintLabels(byDistance.length);
+    lineHints = byDistance.map((l, i) => ({ page, idx: l[0], rect: chars[l[0]].rect, label: labels[i] }));
     hintBuf = '';
     lineHintMode = true;
   }
