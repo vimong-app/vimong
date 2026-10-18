@@ -2238,23 +2238,43 @@
   /** @type {{idx: number, x: number} | null} */
   let lineGoal = null;
 
+  // 줄이 페이지 끝을 넘으면 다음/이전 페이지로 이어간다(마지막 줄에서 j → 다음 페이지 첫 줄, 첫 줄에서 k → 이전
+  // 페이지 마지막 줄). 글자가 없는 페이지(그림만 있는 쪽 등)는 줄 0개라 자연히 건너뛴다. 선택 중엔 넘지 않는다 —
+  // 선택은 한 페이지 안에서만 되기 때문. 화면에 없는 페이지로 가면 gotoPage로 띄운 뒤 커서를 놓는다(따라 스크롤 효과가 보이게).
   /** @param {number} n 아래로 +, 위로 - (줄 수) */
-  function lineMotion(n) {
+  async function lineMotion(n) {
     if (!cursor) return;
-    const chars = pageCharCache.get(cursor.page);
+    const pw = (/** @type {number} */ p) => pageSizes[p]?.[0] ?? Infinity;
+    const startPage = cursor.page, startIdx = cursor.idx;
+    let page = startPage;
+    let chars = pageCharCache.get(page);
     if (!chars || chars.length === 0) return;
-    const { lineOf, lines } = charLines(chars, pageSizes[cursor.page]?.[0] ?? Infinity);
+    let { lineOf, lines } = charLines(chars, pw(page));
     if (lines.length === 0) return;
-    const cur = lineOf[cursor.idx] ?? 0;
-    const target = Math.max(0, Math.min(cur + n, lines.length - 1)); // 페이지 안에서만
-    if (target === cur) return;
     const cx = (/** @type {any} */ c) => (c.rect[0] + c.rect[2]) / 2;
-    const goalX = lineGoal?.idx === cursor.idx ? lineGoal.x : cx(chars[cursor.idx]);
-    let idx = lines[target][0];
-    for (const i of lines[target]) if (Math.abs(cx(chars[i]) - goalX) < Math.abs(cx(chars[idx]) - goalX)) idx = i;
-    if (visualMode) { if (anchorIdx === null) anchorIdx = cursor.idx; } // 선택 중이면 anchor 고정, 범위만 줄 단위로
+    const goalX = lineGoal?.idx === startIdx ? lineGoal.x : cx(chars[startIdx]);
+    const cur = lineOf[startIdx] ?? 0;
+    let line = cur + n;
+    while (!visualMode && (line < 0 || line >= lines.length)) {
+      const next = line < 0 ? page - 1 : page + 1;
+      if (next < 0 || next >= pageCount) break;
+      const over = line < 0 ? -line : line - lines.length + 1; // 경계를 넘어 더 가야 할 줄 수(1이면 바로 옆 페이지 끝 줄)
+      await ensureCharsLoaded(next);
+      chars = pageCharCache.get(next) ?? [];
+      ({ lineOf, lines } = charLines(chars, pw(next)));
+      page = next;
+      line = line < 0 ? lines.length - over : over - 1;
+    }
+    if (lines.length === 0) return; // 문서 끝/처음까지 글자 있는 페이지가 없음
+    line = Math.max(0, Math.min(line, lines.length - 1));
+    if (page === startPage && line === cur) return;
+    if (!cursor || cursor.page !== startPage || cursor.idx !== startIdx) return; // 로딩 기다리는 새 다른 이동이 있었음
+    let idx = lines[line][0];
+    for (const i of lines[line]) if (Math.abs(cx(chars[i]) - goalX) < Math.abs(cx(chars[idx]) - goalX)) idx = i;
+    if (page !== startPage && !visiblePageSet.has(page)) await gotoPage(page);
+    if (visualMode) { if (anchorIdx === null) anchorIdx = startIdx; } // 선택 중이면 anchor 고정, 범위만 줄 단위로
     else anchorIdx = idx;
-    cursor = { page: cursor.page, idx };
+    cursor = { page, idx };
     lineGoal = { idx, x: goalX };
   }
 
@@ -4586,22 +4606,33 @@
     if (mdMode) { statusMsg = t('status.md_unsupported_feature'); return; }
     if (!filePath || !mainEl) return;
     if (!textSelectMode) setToolMode('text');
-    const page = currentPage;
-    await ensureCharsLoaded(page);
-    const chars = pageCharCache.get(page) ?? [];
-    const el = pageWrapEls[page];
-    if (!el) return;
-    const { lines } = charLines(chars, pageSizes[page]?.[0] ?? Infinity);
-    const p = el.getBoundingClientRect(), m = mainEl.getBoundingClientRect();
-    const viewTop = (m.top - p.top) / scale, viewBottom = (m.bottom - p.top) / scale;
-    const visible = lines.filter(l => { const r = chars[l[0]].rect; return r[1] >= viewTop && r[3] <= viewBottom; });
+    // 화면에 보이는 모든 페이지(연속 보기에서 페이지 경계에 걸친 경우, 두 페이지 보기)의 보이는 줄을 페이지 순서대로 모은다
+    const pages = [...visiblePageSet].sort((a, b) => a - b);
+    if (pages.length === 0) pages.push(currentPage);
+    const m = mainEl.getBoundingClientRect();
+    /** @type {{page: number, idx: number, rect: number[]}[]} */
+    const visible = [];
+    let ref = 0; // 커서가 있는 줄의 위치(visible 기준) — 한 글자 라벨을 거기서 가까운 줄부터 준다
+    for (const page of pages) {
+      await ensureCharsLoaded(page);
+      const chars = pageCharCache.get(page) ?? [];
+      const el = pageWrapEls[page];
+      if (!el) continue;
+      const { lines, lineOf } = charLines(chars, pageSizes[page]?.[0] ?? Infinity);
+      const pr = el.getBoundingClientRect();
+      const viewTop = (m.top - pr.top) / scale, viewBottom = (m.bottom - pr.top) / scale;
+      const curLine = cursor?.page === page ? lineOf[cursor.idx] : -1;
+      lines.forEach((l, li) => {
+        const r = chars[l[0]].rect;
+        if (li === curLine) ref = visible.length;
+        if (r[1] >= viewTop && r[3] <= viewBottom) visible.push({ page, idx: l[0], rect: r });
+      });
+    }
     if (visible.length === 0) { statusMsg = t('status.caret_no_text'); return; }
-    // 한 글자 라벨은 커서와 가까운 줄부터(커서가 없거나 다른 페이지면 화면 위쪽 줄부터) — 자주 가는 근처가 가장 빠르게
-    const { lineOf } = charLines(chars, pageSizes[page]?.[0] ?? Infinity);
-    const ref = cursor?.page === page ? lineOf[cursor.idx] ?? 0 : lines.indexOf(visible[0]);
-    const byDistance = [...visible].sort((a, b) => Math.abs(lines.indexOf(a) - ref) - Math.abs(lines.indexOf(b) - ref));
-    const labels = makeHintLabels(byDistance.length);
-    lineHints = byDistance.map((l, i) => ({ page, idx: l[0], rect: chars[l[0]].rect, label: labels[i] }));
+    // 한 글자 라벨은 커서와 가까운 줄부터(커서가 화면에 없으면 화면 위쪽 줄부터) — 자주 가는 근처가 가장 빠르게
+    const order = visible.map((_, i) => i).sort((a, b) => Math.abs(a - ref) - Math.abs(b - ref));
+    const labels = makeHintLabels(order.length);
+    lineHints = order.map((vi, i) => ({ ...visible[vi], label: labels[i] }));
     hintBuf = '';
     lineHintMode = true;
   }
@@ -5318,7 +5349,7 @@
     // ^는 일부 키보드 배열(US-International 등)에서 데드키라 e.key가 'Dead'로 올 수 있어 물리 키(Shift+6)도 본다
     const isCaret = key === '^' || (key === 'Dead' && e.code === 'Digit6' && e.shiftKey);
     if (caretLines && (key === 'j' || key === 'k')) {
-      lineMotion(key === 'j' ? count : -count);
+      await lineMotion(key === 'j' ? count : -count);
     } else if (caretLines && (isCaret || key === '$')) {
       lineEdgeMotion(key === '$');
     } else if (key === 'j') {
