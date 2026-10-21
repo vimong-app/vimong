@@ -2217,6 +2217,237 @@ fn reset_form_fields(state: State<Mutex<AppState>>, page_num: u32, xref: i32) ->
     }
 }
 
+// ── LaTeX animate 패키지 애니메이션(animategif 등) ──
+// animate는 프레임마다 숨김(/F 2) 푸시버튼 위젯 "K.0".."K.n"을 깔아두고, 화면에 보이는 위젯
+// "anmK"의 아이콘을 PDF JavaScript 타이머(app.setInterval)로 갈아 끼우는 식으로 재생한다.
+// 우리는 PDF JS를 실행하지 않으므로(get_page_form_fields 주석 참고) 같은 구조를 직접 읽어서,
+// 재생 타이밍/컨트롤 버튼 동작은 프론트엔드가 흉내 내고, 프레임 그림은 anmK의 /AP /N을 잠깐
+// 그 프레임 것으로 바꿔 MuPDF로 그린 뒤 되돌린다(render_animation_frame). 프레임 속도·반복
+// 여부·자동 재생은 animate가 만든 JS 문자열에서 뽑는다 — 실행하지 않고 읽기만 한다.
+#[derive(serde::Serialize)]
+struct AnimControl {
+    action: &'static str,
+    rect: [f32; 4],
+}
+
+#[derive(serde::Serialize)]
+struct AnimInfo {
+    xref: i32,
+    rect: [f32; 4],
+    // 애니메이션 + 컨트롤 버튼 전체를 감싸는 영역 — 재생/일시정지 아이콘도 바뀌어야 해서
+    // 프레임을 그릴 때 이 영역 통째로 다시 그린다
+    clip: [f32; 4],
+    frames: Vec<i32>,
+    fps: f32,
+    looped: bool,
+    autoplay: bool,
+    controls: Vec<AnimControl>,
+}
+
+// 컨트롤 위젯 이름(K. 뒤) → 프론트엔드 동작 이름. Play*/Pause*는 클릭 대상이 아니라 재생
+// 상태에 따라 보였다 숨었다 하는 아이콘일 뿐이고(그 위에 겹친 PlayPause*가 클릭을 받는다),
+// 그 표시 전환은 render_animation_frame이 한다.
+fn anim_control_action(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "EndLeft" => "stopFirst",
+        "StepLeft" => "stepBwd",
+        "PlayPauseLeft" => "playPauseBwd",
+        "PlayPauseRight" => "playPauseFwd",
+        "StepRight" => "stepFwd",
+        "EndRight" => "stopLast",
+        "Minus" => "slower",
+        "Reset" => "resetSpeed",
+        "Plus" => "faster",
+        _ => return None,
+    })
+}
+
+// (fps, 반복, 자동 재생) — animate의 페이지 열림(PO) 스크립트에서. 예:
+// "a0_fps=12.5;" / 반복이면 gotoNext가 끝에서 "if(a0_playing){a0_seekFrame(0)..." /
+// 자동 재생이면 스크립트 끝이 "if(a0_playsRight){a0_playFwd();}else{a0_playBwd();}".
+// ponytail: 프레임별로 속도가 바뀌는 타임라인(animate의 프레임별 frame rate 변경)은 무시하고 첫 fps로만 재생
+fn parse_animate_js(js: &str, id: &str) -> (f32, bool, bool) {
+    let p = format!("a{id}_");
+    let fps = js
+        .split(&format!("{p}fps="))
+        .nth(1)
+        .and_then(|rest| rest.split(';').next())
+        .and_then(|v| v.parse::<f32>().ok())
+        .filter(|f| *f > 0.0)
+        .unwrap_or(10.0);
+    let looped = js.contains(&format!("{p}gotoNext=function(){{if({p}seekFrame({p}idx+1)<0){{if({p}playing)"));
+    let autoplay = js.trim_end().ends_with(&format!("{{{p}playFwd();}}else{{{p}playBwd();}}"));
+    (fps, looped, autoplay)
+}
+
+fn widget_action_js(widget: &mupdf::pdf::PdfWidget, trigger: &str) -> Option<String> {
+    let js = widget.annotation().object().get_dict("AA").ok()??.get_dict(trigger).ok()??.get_dict("JS").ok()??;
+    if js.is_stream().unwrap_or(false) {
+        js.read_stream().ok().map(|b| String::from_utf8_lossy(&b).into_owned())
+    } else {
+        js.as_string().ok()
+    }
+}
+
+fn rect_arr(r: Rect) -> [f32; 4] {
+    [r.x0, r.y0, r.x1, r.y1]
+}
+
+#[tauri::command]
+fn get_page_animations(state: State<Mutex<AppState>>, page_num: u32) -> Result<Vec<AnimInfo>, String> {
+    let s = state.lock().unwrap();
+    let doc = s.tab().doc.clone().ok_or("No document open")?;
+    if !doc.is_pdf() {
+        return Ok(vec![]);
+    }
+    let pdf: PdfDocument = doc.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+    let page: mupdf::Page = pdf.load_page(page_num as i32).map_err(|e| e.to_string())?;
+    let page: PdfPage = page.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+    let widgets: Vec<(String, mupdf::pdf::PdfWidget)> =
+        page.widgets().filter_map(|w| Some((w.name().ok().flatten()?, w))).collect();
+    let mut out = Vec::new();
+    for (name, w) in &widgets {
+        let Some(id) = name.strip_prefix("anm") else { continue };
+        let (Ok(xref), Ok(rect)) = (w.xref(), w.annotation().rect()) else { continue };
+        let prefix = format!("{id}.");
+        let mut frames = Vec::new();
+        let mut controls = Vec::new();
+        let mut clip = rect;
+        for (n, f) in &widgets {
+            let Some(rest) = n.strip_prefix(&prefix) else { continue };
+            if let Ok(i) = rest.parse::<u32>() {
+                if let Ok(x) = f.xref() {
+                    frames.push((i, x));
+                }
+                continue;
+            }
+            let Ok(r) = f.annotation().rect() else { continue };
+            clip = clip.union(&r);
+            if let Some(action) = anim_control_action(rest) {
+                controls.push(AnimControl { action, rect: rect_arr(r) });
+            }
+        }
+        if frames.len() < 2 {
+            continue;
+        }
+        frames.sort();
+        let (fps, looped, autoplay) = parse_animate_js(&widget_action_js(w, "PO").unwrap_or_default(), id);
+        out.push(AnimInfo {
+            xref,
+            rect: rect_arr(rect),
+            clip: rect_arr(clip),
+            frames: frames.into_iter().map(|(_, x)| x).collect(),
+            fps,
+            looped,
+            autoplay,
+            controls,
+        });
+    }
+    Ok(out)
+}
+
+// 애니메이션 한 프레임을 clip 영역만큼 그린다. 응답은 render_page와 같은 raw RGBA인데, 헤더에
+// 페이지 원점 기준 픽셀 위치(x, y: i32 LE)를 앞에 더 붙여 프론트엔드가 페이지 캔버스와 픽셀
+// 단위로 정확히 겹치게 한다. 문서 객체를 잠깐 바꿨다가 되돌리는 동안 AppState 락을 계속
+// 쥐고 있어서, 그 사이 다른 렌더/저장이 바뀐 상태를 볼 일은 없다. tab.dirty도 안 건드린다.
+#[tauri::command]
+async fn render_animation_frame(
+    app: tauri::AppHandle,
+    page_num: u32,
+    anim_xref: i32,
+    frame_xref: i32,
+    playing: bool,
+    clip: [f32; 4],
+    scale: f32,
+) -> Result<tauri::ipc::Response, String> {
+    let buf = tauri::async_runtime::spawn_blocking(move || {
+        let state = app.state::<Mutex<AppState>>();
+        let s = state.lock().unwrap();
+        let doc = s.tab().doc.clone().ok_or("No document open")?;
+        render_animation_clip(doc, page_num, anim_xref, frame_xref, playing, clip, scale)
+    }).await.map_err(|e| e.to_string())??;
+    Ok(tauri::ipc::Response::new(buf))
+}
+
+fn render_animation_clip(
+    doc: Document,
+    page_num: u32,
+    anim_xref: i32,
+    frame_xref: i32,
+    playing: bool,
+    clip: [f32; 4],
+    scale: f32,
+) -> Result<Vec<u8>, String> {
+    let pdf: PdfDocument = doc.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+    let page: mupdf::Page = pdf.load_page(page_num as i32).map_err(|e| e.to_string())?;
+    let page: PdfPage = page.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+    let widgets: Vec<_> = page.widgets().collect();
+    let by_xref = |x: i32| widgets.iter().find(|w| w.xref().ok() == Some(x));
+    let anim = by_xref(anim_xref).ok_or("애니메이션을 찾지 못했습니다")?;
+    let frame = by_xref(frame_xref).ok_or("프레임을 찾지 못했습니다")?;
+    let id = anim.name().ok().flatten().and_then(|n| n.strip_prefix("anm").map(str::to_string)).unwrap_or_default();
+
+    // (바꿀 객체, 키, 원래 값) — 그린 뒤 성공/실패와 상관없이 전부 되돌린다
+    let mut swaps: Vec<(PdfObject, &str, Option<PdfObject>)> = Vec::new();
+    let result = (|| -> Result<Vec<u8>, mupdf::Error> {
+        let frame_ap = frame.annotation().object().get_dict("AP")?.and_then(|ap| ap.get_dict("N").ok().flatten());
+        if let (Some(mut ap), Some(frame_ap)) = (anim.annotation().object().get_dict("AP")?, frame_ap) {
+            swaps.push((ap.try_clone()?, "N", ap.get_dict("N")?));
+            ap.dict_put("N", frame_ap)?;
+        }
+        if playing {
+            for (suffix, flags) in [("PlayLeft", 2), ("PlayRight", 2), ("PauseLeft", 0), ("PauseRight", 0)] {
+                let name = format!("{id}.{suffix}");
+                let Some(w) = widgets.iter().find(|w| w.name().ok().flatten().as_deref() == Some(name.as_str())) else { continue };
+                let mut obj = w.annotation().object();
+                swaps.push((obj.try_clone()?, "F", obj.get_dict("F")?));
+                obj.dict_put("F", PdfObject::new_int(flags)?)?;
+            }
+        }
+        let matrix = Matrix::new_scale(scale, scale);
+        let page_origin = page.bounds()?.transform(&matrix).round();
+        let bbox = Rect::new(clip[0], clip[1], clip[2], clip[3]).transform(&matrix).round();
+        let mut pixmap = Pixmap::new_with_rect(&Colorspace::device_rgb(), bbox, true)?;
+        pixmap.clear_with(255)?; // 불투명 흰 바탕 — 아래 페이지 캔버스의 이전 프레임이 비쳐 보이지 않게
+        {
+            let dev = mupdf::Device::from_pixmap(&pixmap)?;
+            page.run(&dev, &matrix)?;
+        }
+        let (w, h) = (pixmap.width(), pixmap.height());
+        let samples = pixmap.samples();
+        let mut out = Vec::with_capacity(16 + samples.len());
+        out.extend_from_slice(&(bbox.x0 - page_origin.x0).to_le_bytes());
+        out.extend_from_slice(&(bbox.y0 - page_origin.y0).to_le_bytes());
+        out.extend_from_slice(&w.to_le_bytes());
+        out.extend_from_slice(&h.to_le_bytes());
+        out.extend_from_slice(samples);
+        Ok(out)
+    })();
+    for (mut obj, key, old) in swaps.into_iter().rev() {
+        let _ = match old {
+            Some(v) => obj.dict_put(key, v),
+            None => obj.dict_delete(key),
+        };
+    }
+    result.map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod animate_tests {
+    use super::parse_animate_js;
+
+    // animate v2022/09/15가 실제로 만든 PO 스크립트에서 필요한 부분만 잘라 왔다
+    #[test]
+    fn parses_fps_loop_and_autoplay() {
+        let looped = "a0_fps=12.5;a0_spd=1;a0_gotoNext=function(){if(a0_seekFrame(a0_idx+1)<0){if(a0_playing){a0_seekFrame(0);a0_setFps(12.5);}else{a0_stopLast();}}};a0_seekFrame(0);}if(a0_playsRight){a0_playFwd();}else{a0_playBwd();}";
+        assert_eq!(parse_animate_js(looped, "0"), (12.5, true, true));
+        let once = "a2_fps=6.25;a2_gotoNext=function(){if(a2_seekFrame(a2_idx+1)<0){a2_stopLast();}};a2_seekFrame(0);}";
+        assert_eq!(parse_animate_js(once, "2"), (6.25, false, false));
+        assert_eq!(parse_animate_js("", "0"), (10.0, false, false));
+    }
+
+}
+
 // Producer 필드에 "MuPDF"가 이미 없으면 뒤에 이어 붙인다("; MuPDF") — 원본 도구 정보는
 // 보존하면서 이 파일을 실제로 (다시) 쓴 게 MuPDF라는 것도 남긴다(copy_pdf_info와 같은 목적,
 // 다만 이쪽은 새 문서로 복사하는 게 아니라 같은 문서를 그대로 고쳐서 저장하는 경로라 직접
@@ -5391,6 +5622,8 @@ pub fn run() {
             toggle_form_checkbox,
             select_form_radio,
             reset_form_fields,
+            get_page_animations,
+            render_animation_frame,
             save_document,
             render_page,
             render_thumbnail,

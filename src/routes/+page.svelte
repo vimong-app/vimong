@@ -1221,6 +1221,125 @@
     try { pageFieldCache.set(page, await invoke('get_page_form_fields', { pageNum: page })); } catch (_) { /* 실패하면 이전 값 유지 */ }
   }
 
+  // ── LaTeX animate 패키지 애니메이션(animategif 등) — Rust get_page_animations 주석 참고.
+  // PDF JS를 실행하는 대신 animate가 JS로 하던 동작(자동 재생/반복, 재생·일시정지, 한 프레임씩,
+  // 처음·끝으로, 속도 조절, 애니메이션 클릭)을 여기서 그대로 흉내 내고, 프레임 그림은 Rust가
+  // 애니메이션+컨트롤 영역만 그려 준 것을 페이지 캔버스 위에 얹은 작은 캔버스에 칠한다.
+  let pageAnimCache = $state(new SvelteMap()); // page index -> anim[]
+
+  async function ensureAnimsLoaded(i) {
+    if (pageAnimCache.has(i)) return;
+    pageAnimCache.set(i, []); // 동시에 여러 번 요청되는 것 방지용 placeholder
+    try { pageAnimCache.set(i, await invoke('get_page_animations', { pageNum: i })); } catch (_) { /* skip */ }
+  }
+
+  function animPlayer(canvas, { page, anim, scale: initialScale }) {
+    const last = anim.frames.length - 1;
+    const st = { idx: 0, playing: false, fwd: true, spd: 1, timer: null, scale: initialScale, seq: 0, pressed: false };
+    let frameCache = new Map(); // `${idx}:${playing}` -> render_animation_frame 프라미스
+
+    function frameBuf() {
+      const key = `${st.idx}:${st.playing}`;
+      let p = frameCache.get(key);
+      if (!p) {
+        const cache = frameCache;
+        p = invoke('render_animation_frame', {
+          pageNum: page, animXref: anim.xref, frameXref: anim.frames[st.idx], playing: st.playing,
+          clip: anim.clip, scale: st.scale * (window.devicePixelRatio || 1),
+        });
+        p.catch(() => cache.delete(key)); // 실패하면 다음에 다시 시도
+        cache.set(key, p);
+      }
+      return p;
+    }
+
+    async function paint() {
+      const seq = ++st.seq;
+      let buf;
+      try { buf = await frameBuf(); } catch (_) { return; }
+      if (seq !== st.seq) return; // 그 사이 더 새 프레임 요청이 들어옴
+      const v = new DataView(buf);
+      const x = v.getInt32(0, true), y = v.getInt32(4, true), w = v.getUint32(8, true), h = v.getUint32(12, true);
+      const dpr = window.devicePixelRatio || 1;
+      canvas.width = w; canvas.height = h;
+      Object.assign(canvas.style, { left: `${x / dpr}px`, top: `${y / dpr}px`, width: `${w / dpr}px`, height: `${h / dpr}px` });
+      canvas.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf, 16), w, h), 0, 0);
+    }
+
+    function seek(f) { if (f < 0 || f > last) return false; st.idx = f; return true; }
+    function pause() { clearInterval(st.timer); st.playing = false; }
+    function play(fwd) {
+      clearInterval(st.timer);
+      st.fwd = fwd; st.playing = true;
+      st.timer = setInterval(() => {
+        if (!seek(st.idx + (st.fwd ? 1 : -1))) {
+          if (anim.looped) seek(st.fwd ? 0 : last);
+          else { pause(); seek(st.fwd ? last : 0); }
+        }
+        paint();
+      }, 1000 / anim.fps / st.spd);
+    }
+    // 끝에 와 있으면 반대쪽 끝에서 다시 시작(animate의 playFwd/playBwd)
+    function playFrom(fwd) {
+      if (fwd && st.idx === last) seek(0);
+      if (!fwd && st.idx === 0) seek(last);
+      play(fwd);
+    }
+    const actions = {
+      stopFirst: () => { pause(); seek(0); },
+      stopLast: () => { pause(); seek(last); },
+      stepBwd: () => { if (!st.playing) seek(st.idx - 1); },
+      stepFwd: () => { if (!st.playing) seek(st.idx + 1); },
+      playPauseBwd: () => { if (st.playing) pause(); else playFrom(false); },
+      playPauseFwd: () => { if (st.playing) pause(); else playFrom(true); },
+      slower: () => { st.spd /= 1.1; if (st.playing) play(st.fwd); },
+      faster: () => { st.spd *= 1.1; if (st.playing) play(st.fwd); },
+      resetSpeed: () => { st.spd = 1; if (st.playing) play(st.fwd); },
+    };
+
+    const inside = (r, x, y) => x >= r[0] && x <= r[2] && y >= r[1] && y <= r[3];
+    function onDown(e) {
+      e.stopPropagation(); // 페이지의 커서 배치/텍스트 선택으로 새지 않게
+      if (e.button !== 0) return;
+      const r = canvas.parentElement.getBoundingClientRect();
+      const x = (e.clientX - r.left) / st.scale, y = (e.clientY - r.top) / st.scale;
+      const ctl = anim.controls.find(c => inside(c.rect, x, y));
+      if (ctl) actions[ctl.action]();
+      // animate와 같이 애니메이션을 누르고 있는 동안은 멈추고, 떼면 재생(Shift면 방향 반대)
+      else if (inside(anim.rect, x, y)) { st.pressed = true; pause(); }
+      paint();
+    }
+    function onUp(e) {
+      if (!st.pressed) return;
+      st.pressed = false;
+      playFrom(e.shiftKey ? !st.fwd : st.fwd);
+      paint();
+    }
+    const stop = (e) => e.stopPropagation();
+    canvas.addEventListener('mousedown', onDown);
+    canvas.addEventListener('mouseup', onUp);
+    canvas.addEventListener('click', stop);
+    canvas.addEventListener('dblclick', stop);
+
+    // 페이지가 화면에 들어오면 자동 재생, 나가면 멈춤(animate의 페이지 열림/닫힘 스크립트) —
+    // 연속 스크롤 모드에선 페이지 DOM이 계속 남아 있어서 이게 없으면 화면 밖에서도 계속 돈다.
+    const observer = new IntersectionObserver(([en]) => {
+      if (!en.isIntersecting) pause();
+      else if (anim.autoplay && !st.playing) { playFrom(st.fwd); paint(); }
+    });
+    observer.observe(canvas.parentElement);
+
+    return {
+      update({ scale: s }) {
+        if (s === st.scale) return;
+        st.scale = s;
+        frameCache = new Map();
+        if (canvas.width) paint();
+      },
+      destroy() { pause(); observer.disconnect(); },
+    };
+  }
+
   function fieldAt(page, x, y) {
     const fields = pageFieldCache.get(page);
     return fields?.find(f => x >= f.rect[0] && x <= f.rect[2] && y >= f.rect[1] && y <= f.rect[3]) ?? null;
@@ -2436,6 +2555,7 @@
     pageNoteCache.clear();
     pageHighlightAnnotCache.clear();
     pageFieldCache.clear();
+    pageAnimCache.clear();
     combDrafts.clear();
     focusedCombXref = null;
     pageBitmapCache.clear();
@@ -2542,6 +2662,7 @@
     ensureNotesLoaded(i);
     ensureHighlightsLoaded(i);
     ensureFieldsLoaded(i);
+    ensureAnimsLoaded(i);
     if (textSelectMode) ensureCharsLoaded(i);
     if (canvas.dataset.scale === `${scale}:${getPageRotation(i)}`) return;
     try {
@@ -6923,6 +7044,9 @@
          onmousemove={(e) => onPageMouseMove(e, i)} onmouseleave={onPageMouseLeave} onclick={(e) => onPageClick(e, i)}>
       <canvas bind:this={pageCanvasRefs[i]} aria-label="page {i + 1}"></canvas>
       {#if getPageRotation(i) === 0}
+        {#each pageAnimCache.get(i) ?? [] as anim (anim.xref)}
+          <canvas class="anim-canvas" use:animPlayer={{ page: i, anim, scale }}></canvas>
+        {/each}
         <!-- 검색/링크/텍스트 선택 좌표는 회전 없는 페이지 기준이라, 돌아간 화면 위에 그대로
              올리면 안 맞는다 — 그래서 회전 중엔 이 오버레이들을 아예 안 그린다 -->
         {#if selection?.page === i}
@@ -8590,6 +8714,8 @@
   }
 
   .page-wrap canvas { display: block; background: #fff; width: 100%; height: 100%; }
+  /* 애니메이션 프레임 캔버스 — 첫 프레임이 칠해지기 전엔 크기 0(위 규칙의 100%/흰 배경이 페이지를 덮지 않게) */
+  .page-wrap canvas.anim-canvas { position: absolute; width: 0; height: 0; background: none; cursor: pointer; }
   /* 페이지 다크 모드 — hue-rotate로 색상은 되돌리고 밝기만 뒤집는다. 0.88이라 순검정 대신 짙은 회색.
      검색/선택 오버레이는 canvas 형제라 필터 밖 — 원래 색 유지. hwp는 SVG를 감싼 div에 건다. */
   :global(body.invert-pages) .page-wrap canvas,
