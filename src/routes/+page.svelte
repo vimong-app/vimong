@@ -686,7 +686,7 @@
       mdSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null;
+      selectedTocId = null; selectedTocIds = new SvelteSet();
       marks = loadMarks(path);
       try { toc = buildHwpToc(JSON.parse(hwpDoc.getStructure('auto')).roots); } catch (_) { toc = []; }
       collapsed = collectParentIds(toc, '', new SvelteSet());
@@ -735,7 +735,7 @@
       allSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null;
+      selectedTocId = null; selectedTocIds = new SvelteSet();
       marks = loadMarks(path);
       mdSearchResults = [];
       toc = buildMdToc(mdSource);
@@ -3265,7 +3265,7 @@
     currentFileMtime = s.currentFileMtime ?? 0;
     marks = s.marks ?? {};
     collapsed = collectParentIds(s.toc, '', new SvelteSet());
-    selectedTocId = null;
+    selectedTocId = null; selectedTocIds = new SvelteSet();
     // PNG 캐시(Blob URL)를 안 쓰기로 하면서 탭별 렌더 결과도 안 들고 있는다 —
     // 래스터화가 이제 가벼워서(PNG 인코딩 없음) 전환할 때마다 다시 그려도 충분히 빠르다
   }
@@ -3401,7 +3401,7 @@
     thumbnails = []; allSearchResults = []; mdSearchResults = []; pageHighlights = []; allNotes = [];
     lastSearch = ''; searchResultIdx = 0;
     statusMsg = 'No file open.  :e to open';
-    toc = []; sidebarView = 'thumbs'; collapsed = new SvelteSet(); selectedTocId = null;
+    toc = []; sidebarView = 'thumbs'; collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet();
     hwpMode = false; hwpPages = []; hwpDoc = null;
     mdMode = false; mdSource = ''; mdScale = 1.0;
     epubReflowable = false;
@@ -4066,7 +4066,7 @@
       mdSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null;
+      selectedTocId = null; selectedTocIds = new SvelteSet();
       marks = loadMarks(path);
       toc = await invoke('get_toc');
       collapsed = collectParentIds(toc, '', new SvelteSet()); // 챕터만 보이게 하위 항목은 기본 접힌 채로 시작
@@ -4639,9 +4639,65 @@
     return r.start === r.end ? `${r.start + 1}` : `${r.start + 1}-${r.end + 1}`;
   }
 
+  // ── toc 다중 선택 (Cmd/Ctrl/Shift+클릭, 드래그) — 썸네일 다중 선택과 같은 규칙, 내보내기 범위 지정용 ──
+  // 선택은 id 집합, 범위(Shift/드래그)는 지금 보이는(펼쳐진) flatToc 순서 기준
+  let selectedTocIds = $state(new SvelteSet());
+  let tocSelectAnchor = null; // 비반응 — Shift+클릭 범위의 시작 id
+  let tocDragAnchor = null;   // 비반응 — 드래그 중일 때 시작 인덱스(flatToc)
+
+  function selectTocRange(fromIdx, toIdx, base) {
+    const [lo, hi] = fromIdx <= toIdx ? [fromIdx, toIdx] : [toIdx, fromIdx];
+    const next = new SvelteSet(base);
+    for (let k = lo; k <= hi; k++) next.add(flatToc[k].id);
+    selectedTocIds = next;
+  }
+
+  function onTocClick(e, item, i) {
+    if (e.shiftKey && tocSelectAnchor !== null) {
+      const a = flatToc.findIndex(it => it.id === tocSelectAnchor);
+      if (a !== -1) { selectTocRange(a, i, selectedTocIds); return; }
+    }
+    if (e.metaKey || e.ctrlKey) {
+      if (selectedTocIds.has(item.id)) selectedTocIds.delete(item.id); else selectedTocIds.add(item.id);
+      tocSelectAnchor = item.id;
+      return;
+    }
+    selectedTocIds = new SvelteSet([item.id]);
+    tocSelectAnchor = item.id;
+    gotoTocItem(item);
+  }
+
+  // 수식키 없이 누른 채 다른 항목 위로 끌면 시작~현재 항목을 새 선택으로. 시작 항목과 다른 곳에서
+  // 떼면 click이 그 항목에 안 떨어지므로(공통 부모로 감) 이동 없이 선택만 남는다.
+  function onTocMouseDown(e, i) {
+    if (e.button !== 0 || e.shiftKey || e.metaKey || e.ctrlKey) return;
+    tocDragAnchor = i;
+    window.addEventListener('mouseup', () => { tocDragAnchor = null; }, { once: true });
+  }
+  function onTocMouseEnter(e, i) {
+    if (tocDragAnchor === null || !(e.buttons & 1)) return;
+    selectTocRange(tocDragAnchor, i, []);
+    tocSelectAnchor = flatToc[tocDragAnchor].id;
+  }
+
+  // 선택한 항목들의 섹션 범위를 합친 스펙 — 부모·자식을 같이 골라 겹쳐도 페이지 집합이라 한 번만 들어간다
+  function selectedTocSpec() {
+    const pages = new Set();
+    for (const it of flattenToc(toc, 0, '', [], true)) {
+      if (!selectedTocIds.has(it.id)) continue;
+      const r = tocSectionRange(it);
+      if (r) for (let p = r.start; p <= r.end; p++) pages.add(p);
+    }
+    return pages.size ? pagesToSpec(pages) : null;
+  }
+
   // 내보내기 페이지 스펙 기본값: 썸네일 다중 선택 > toc에서 선택해둔 헤딩(그 섹션 전체) > 없음(호출부가 현재 페이지/전체로 처리)
   function defaultExportSpec() {
-    if (selectedThumbs.size > 1) return selectedThumbsToSpec();
+    if (selectedThumbs.size > 1) return pagesToSpec(selectedThumbs);
+    if (sidebarView === 'toc' && selectedTocIds.size > 1) {
+      const spec = selectedTocSpec();
+      if (spec) return spec;
+    }
     if (sidebarView === 'toc' && selectedTocId) {
       const item = flatToc.find(it => it.id === selectedTocId);
       const spec = item && tocSectionSpec(item);
@@ -4650,17 +4706,19 @@
     return null;
   }
 
-  // toc 항목 우클릭 — 그 헤딩(하위 섹션 포함)의 페이지 범위를 내보내기 스펙으로 미리 채운다
+  // toc 항목 우클릭 — 그 헤딩(하위 섹션 포함)의 페이지 범위를 내보내기 스펙으로 미리 채운다.
+  // 우클릭한 항목이 다중 선택 안에 있으면 선택 전체, 밖이면 썸네일처럼 그 항목 하나로 선택을 바꾼다.
   async function onTocContextMenu(e, item) {
     e.preventDefault();
     if (mdMode || item.page === null) return; // 마크다운은 페이지 PNG로 내보낼 개념이 없음
     selectedTocId = item.id;
+    if (!selectedTocIds.has(item.id)) { selectedTocIds = new SvelteSet([item.id]); tocSelectAnchor = item.id; }
     const exportItem = await MenuItem.new({
       text: t('context.export'),
       action: () => {
         exportFormat = 'png';
         exportFilename = defaultExportFilename();
-        exportPageSpec = tocSectionSpec(item) ?? String(item.page + 1);
+        exportPageSpec = (selectedTocIds.size > 1 ? selectedTocSpec() : tocSectionSpec(item)) ?? String(item.page + 1);
         exportMerge = false; exportPassword = ''; exportError = '';
         showExportModal = true;
       },
@@ -4870,7 +4928,7 @@
       action: () => {
         exportFormat = 'png';
         exportFilename = defaultExportFilename();
-        exportPageSpec = selectedThumbs.size > 1 ? selectedThumbsToSpec() : String(i + 1);
+        exportPageSpec = selectedThumbs.size > 1 ? pagesToSpec(selectedThumbs) : String(i + 1);
         exportMerge = false; exportPassword = ''; exportError = '';
         showExportModal = true;
       },
@@ -4883,9 +4941,9 @@
     await menu.popup();
   }
 
-  // 선택한 페이지(0-indexed)를 :export 페이지 지정 문법(1-indexed, 연속 구간은 a-b)으로 압축
-  function selectedThumbsToSpec() {
-    const pages = [...selectedThumbs].sort((a, b) => a - b);
+  // 페이지 집합(0-indexed)을 :export 페이지 지정 문법(1-indexed, 연속 구간은 a-b)으로 압축
+  function pagesToSpec(pageSet) {
+    const pages = [...pageSet].sort((a, b) => a - b);
     const parts = [];
     let start = pages[0], prev = pages[0];
     for (let i = 1; i <= pages.length; i++) {
@@ -6024,7 +6082,7 @@
     recentIndex = 0;
     toc = [];
     sidebarView = 'thumbs';
-    collapsed = new SvelteSet(); selectedTocId = null;
+    collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet();
   }
 
   // 터미널에서 드래그&드롭 등으로 복사된 경로는 따옴표로 감싸지거나
@@ -6985,12 +7043,14 @@
             <div
               class="toc-item"
               class:toc-current={item.id === currentTocItem?.id}
-              class:toc-selected={item.id === currentTocItem?.id && item.id === selectedTocId}
+              class:toc-selected={(item.id === currentTocItem?.id && item.id === selectedTocId) || (selectedTocIds.size > 1 && selectedTocIds.has(item.id))}
               style="padding-left:{6 + item.depth * 14}px"
               role="button"
               tabindex="-1"
               bind:this={tocItemEls[i]}
-              onclick={() => gotoTocItem(item)}
+              onclick={(e) => onTocClick(e, item, i)}
+              onmousedown={(e) => onTocMouseDown(e, i)}
+              onmouseenter={(e) => onTocMouseEnter(e, i)}
               onkeydown={(e) => { if (e.key === 'Enter') gotoTocItem(item); }}
               oncontextmenu={(e) => onTocContextMenu(e, item)}
             >
@@ -8559,6 +8619,8 @@
     border-radius: 3px;
     cursor: pointer;
     font-size: 0.78rem;
+    user-select: none; /* 드래그 다중 선택 중 제목 텍스트가 같이 긁히지 않게 */
+    -webkit-user-select: none;
   }
   .toc-item:hover { background: var(--sh-6); }
   .toc-item.toc-current { background: rgba(58, 110, 168, 0.55); }
