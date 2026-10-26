@@ -6,7 +6,7 @@
   import { getCurrentWindow } from '@tauri-apps/api/window';
   import { readText as clipboardRead, writeText as clipboardWrite } from '@tauri-apps/plugin-clipboard-manager';
   import { Menu, MenuItem } from '@tauri-apps/api/menu';
-  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { openUrl, revealItemInDir } from '@tauri-apps/plugin-opener';
   import { getVersion } from '@tauri-apps/api/app';
   import { SvelteSet, SvelteMap } from 'svelte/reactivity';
   import { onMount, onDestroy, tick, flushSync, untrack } from 'svelte';
@@ -2919,6 +2919,8 @@
   let exportFilename = $state(''); // 확장자 제외 — exportFormat과 합쳐 원본 PDF와 같은 폴더에 저장
   let exportPassword = $state(''); // PDF 내보내기 전용, 비우면 암호 없음
   let exportPageSpec = $state('');
+  // 내보내기 완료 후 "폴더 열기" 확인 모달 — 실제로 쓴 파일 경로들(번호 붙은 파일 포함)을 들고 있다
+  let exportDonePaths = $state(null);
   let exportMerge = $state(false); // 여러 페이지를 파일 하나로 합칠지 — png/jpg에서만 의미 있음(pdf는 원래도 한 파일)
   let exportError = $state('');
   let exportBusy = $state(false);
@@ -5075,6 +5077,8 @@
         cancelExport(); return;
       } else if (showExportManyConfirm) {
         resolveExportMany(false); return;
+      } else if (exportDonePaths) {
+        exportDonePaths = null; return;
       } else if (visualMode) {
         // 검색 결과가 남아있어도 선택 취소가 먼저 — 아래 검색 결과 지우기보다 우선한다
         visualMode = false;
@@ -5248,6 +5252,24 @@
       if (key === 'Tab') {
         e.preventDefault();
         const buttons = [...document.querySelectorAll('.export-many-modal button')];
+        const idx = buttons.indexOf(document.activeElement);
+        const next = e.shiftKey
+          ? buttons[(idx - 1 + buttons.length) % buttons.length]
+          : buttons[(idx + 1) % buttons.length];
+        next?.focus();
+      }
+      return;
+    }
+
+    if (exportDonePaths) {
+      // '폴더 열기'가 기본 버튼 — 버튼에 포커스가 있으면 Enter는 그 버튼의 네이티브 클릭에 맡긴다
+      if (key === 'Enter') {
+        if (e.target.tagName !== 'BUTTON') { e.preventDefault(); revealExportDone(); }
+        return;
+      }
+      if (key === 'Tab') {
+        e.preventDefault();
+        const buttons = [...document.querySelectorAll('.export-done-modal button')];
         const idx = buttons.indexOf(document.activeElement);
         const next = e.shiftKey
           ? buttons[(idx - 1 + buttons.length) % buttons.length]
@@ -6247,6 +6269,7 @@
   // 많으면(5장 초과) merge 여부와 상관없이 확인창을 띄운다 — 합치기도 페이지가 많으면 렌더링/
   // 합성 부하가 커서 시스템이 멎을 수 있다.
   // 반환값 false는 사용자가 확인창에서 취소했다는 뜻 — 호출부는 "저장 완료" 메시지를 건너뛴다.
+  // 성공하면 실제로 쓴 파일 경로 배열(페이지마다 번호 붙은 파일들 포함)을 돌려준다.
   async function runExport(outPath, format, pageSpec, merge = false, password = null) {
     if (!pageSpec) {
       // 페이지 스펙을 안 밝혔으면(모달 필드도 비어있고, :export 명령에도 스펙이 없으면)
@@ -6260,8 +6283,7 @@
     const n = pageSpec ? countSpecPages(pageSpec) : pageCount;
     const manyFiles = format === 'pdf' ? (!merge && n > 5) : (n > 5);
     if (manyFiles && !(await confirmExportMany(n, merge))) return false;
-    await invoke('export_document', { outPath, format, pageSpec, merge, password });
-    return true;
+    return await invoke('export_document', { outPath, format, pageSpec, merge, password });
   }
 
   // 파일 메뉴 "내보내기" — 포맷(png/jpg/pdf), 파일명, 페이지 스펙(비우면 전체 문서, 이미지는
@@ -6291,15 +6313,25 @@
     exportBusy = true;
     try {
       const password = exportFormat === 'pdf' ? (exportPassword.trim() || null) : null;
-      if (await runExport(target, exportFormat, spec || null, exportMerge, password)) {
+      const written = await runExport(target, exportFormat, spec || null, exportMerge, password);
+      if (written) {
         statusMsg = t('status.export_done', { path: target });
         showExportModal = false;
+        exportDonePaths = written;
       }
     } catch (e) {
       exportError = String(e);
     } finally {
       exportBusy = false;
     }
+  }
+
+  // Finder/탐색기에서 내보낸 파일들을 선택해 보여준다. 실패해도(파일 관리자 없는 리눅스 등)
+  // 내보내기 자체는 끝났으니 상태줄에만 알린다
+  function revealExportDone() {
+    const paths = exportDonePaths;
+    exportDonePaths = null;
+    if (paths) revealItemInDir(paths).catch(e => { statusMsg = t('status.export_reveal_error', { e }); });
   }
 
   function cancelExport() {
@@ -8330,6 +8362,20 @@
   </div>
 {/if}
 
+<!-- ── 내보내기 완료 → 폴더 열기 modal ('폴더 열기'에 기본 포커스) ── -->
+{#if exportDonePaths}
+  <div class="overlay" role="dialog" aria-modal="true">
+    <div class="modal quit-modal export-done-modal">
+      <h2>{t('export.done_title')}</h2>
+      <p class="quit-desc export-done-path">{exportDonePaths.length > 1 ? t('export.done_files', { name: baseName(exportDonePaths[0]), n: exportDonePaths.length }) : exportDonePaths[0]}</p>
+      <div class="quit-actions">
+        <button onclick={() => exportDonePaths = null}>{t('modal.close')}</button>
+        <button class="password-confirm-btn" use:focusOnMount onclick={revealExportDone}>{t('export.open_folder')}</button>
+      </div>
+    </div>
+  </div>
+{/if}
+
 <!-- ── 내보내기 파일 개수 확인 modal (취소에 기본 포커스) ── -->
 {#if showExportManyConfirm}
   <div class="overlay" role="dialog" aria-modal="true"
@@ -9607,6 +9653,7 @@
   }
   .export-filename-row { display: flex; align-items: center; gap: 8px; }
   .export-filename-row input { flex: 1; min-width: 0; }
+  .export-done-path { word-break: break-all; }
   .export-merge-row {
     display: flex;
     align-items: center;

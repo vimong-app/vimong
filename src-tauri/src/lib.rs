@@ -3330,7 +3330,8 @@ async fn export_document(
     page_spec: Option<String>,
     merge: bool,
     password: Option<String>,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+    // 반환값: 실제로 쓴 파일 경로들 — 프론트가 Finder/탐색기에서 그 파일들을 선택해 보여주는 데 쓴다
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Mutex<AppState>>();
         let (path, page_count) = {
@@ -3353,6 +3354,7 @@ async fn export_document(
                     return Err("암호로 보호된 문서는 저장할 수 없습니다".to_string());
                 }
                 let src_pdf: PdfDocument = doc.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+                let mut written = Vec::with_capacity(pages.len());
                 for page_idx in &pages {
                     let mut opts = PdfWriteOptions::default();
                     opts.set_garbage_level(4).set_compress(true);
@@ -3363,11 +3365,14 @@ async fn export_document(
                     let insert_opts = InsertPdfOptions { source_pages: PageSelection::Pages(vec![*page_idx]), ..Default::default() };
                     dst.insert_pdf(&src_pdf, insert_opts).map_err(|e| e.to_string())?;
                     copy_pdf_info(&src_pdf, &mut dst).map_err(|e| e.to_string())?;
-                    dst.save_with_options(&numbered_export_path(&out_path, page_idx + 1), opts).map_err(|e| e.to_string())?;
+                    let file_path = numbered_export_path(&out_path, page_idx + 1);
+                    dst.save_with_options(&file_path, opts).map_err(|e| e.to_string())?;
+                    written.push(file_path);
                 }
-                return Ok(());
+                return Ok(written);
             }
-            return write_pdf_pages(&path, &out_path, page_spec.as_deref(), page_count, password.as_deref());
+            write_pdf_pages(&path, &out_path, page_spec.as_deref(), page_count, password.as_deref())?;
+            return Ok(vec![out_path]);
         }
 
         let pages: Vec<usize> = match &page_spec {
@@ -3384,14 +3389,16 @@ async fn export_document(
                 pixmaps.push(page.to_pixmap(&matrix, &Colorspace::device_rgb(), false, true).map_err(|e| e.to_string())?);
             }
             let merged = merge_pixmaps_vertically(&pixmaps)?;
-            return match format.as_str() {
-                "png" => merged.save_as(&out_path, ImageFormat::PNG).map_err(|e| e.to_string()),
-                "jpg" => save_jpeg(&merged, &out_path),
-                other => Err(format!("지원하지 않는 내보내기 형식: {other}")),
-            };
+            match format.as_str() {
+                "png" => merged.save_as(&out_path, ImageFormat::PNG).map_err(|e| e.to_string())?,
+                "jpg" => save_jpeg(&merged, &out_path)?,
+                other => return Err(format!("지원하지 않는 내보내기 형식: {other}")),
+            }
+            return Ok(vec![out_path]);
         }
 
         let multi = pages.len() > 1;
+        let mut written = Vec::with_capacity(pages.len());
         for page_idx in pages {
             let page = doc.load_page(page_idx as i32).map_err(|e| e.to_string())?;
             let pixmap = page.to_pixmap(&matrix, &Colorspace::device_rgb(), false, true).map_err(|e| e.to_string())?;
@@ -3401,8 +3408,9 @@ async fn export_document(
                 "jpg" => save_jpeg(&pixmap, &file_path)?,
                 other => return Err(format!("지원하지 않는 내보내기 형식: {other}")),
             }
+            written.push(file_path);
         }
-        Ok(())
+        Ok(written)
     }).await.map_err(|e| e.to_string())?
 }
 
