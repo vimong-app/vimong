@@ -686,7 +686,7 @@
       mdSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null; selectedTocIds = new SvelteSet();
+      selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
       marks = loadMarks(path);
       try { toc = buildHwpToc(JSON.parse(hwpDoc.getStructure('auto')).roots); } catch (_) { toc = []; }
       collapsed = collectParentIds(toc, '', new SvelteSet());
@@ -735,7 +735,7 @@
       allSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null; selectedTocIds = new SvelteSet();
+      selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
       marks = loadMarks(path);
       mdSearchResults = [];
       toc = buildMdToc(mdSource);
@@ -896,9 +896,9 @@
           pageRects.get(r.pageIndex).push([r.x, r.y, r.x + r.width, r.y + r.height]);
         }
       }
-      const results = [...pageRects.entries()]
+      const results = inSearchScope([...pageRects.entries()]
         .sort((a, b) => a[0] - b[0])
-        .map(([page, rects]) => ({ page, hit_count: rects.length, rects }));
+        .map(([page, rects]) => ({ page, hit_count: rects.length, rects })));
       allSearchResults = results;
       if (results.length > 0) {
         searchResultIdx = 0;
@@ -3267,7 +3267,7 @@
     currentFileMtime = s.currentFileMtime ?? 0;
     marks = s.marks ?? {};
     collapsed = collectParentIds(s.toc, '', new SvelteSet());
-    selectedTocId = null; selectedTocIds = new SvelteSet();
+    selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
     // PNG 캐시(Blob URL)를 안 쓰기로 하면서 탭별 렌더 결과도 안 들고 있는다 —
     // 래스터화가 이제 가벼워서(PNG 인코딩 없음) 전환할 때마다 다시 그려도 충분히 빠르다
   }
@@ -3403,7 +3403,7 @@
     thumbnails = []; allSearchResults = []; mdSearchResults = []; pageHighlights = []; allNotes = [];
     lastSearch = ''; searchResultIdx = 0;
     statusMsg = 'No file open.  :e to open';
-    toc = []; sidebarView = 'thumbs'; collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet();
+    toc = []; sidebarView = 'thumbs'; collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
     hwpMode = false; hwpPages = []; hwpDoc = null;
     mdMode = false; mdSource = ''; mdScale = 1.0;
     epubReflowable = false;
@@ -4068,7 +4068,7 @@
       mdSearchResults = [];
       pageHighlights = [];
       lastSearch = ''; searchQuery = '';
-      selectedTocId = null; selectedTocIds = new SvelteSet();
+      selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
       marks = loadMarks(path);
       toc = await invoke('get_toc');
       collapsed = collectParentIds(toc, '', new SvelteSet()); // 챕터만 보이게 하위 항목은 기본 접힌 채로 시작
@@ -4682,15 +4682,41 @@
     tocSelectAnchor = flatToc[tocDragAnchor].id;
   }
 
-  // 선택한 항목들의 섹션 범위를 합친 스펙 — 부모·자식을 같이 골라 겹쳐도 페이지 집합이라 한 번만 들어간다
-  function selectedTocSpec() {
+  // 선택한 항목들의 섹션 범위를 합친 페이지 집합 — 부모·자식을 같이 골라 겹쳐도 한 번만 들어간다
+  function selectedTocPages() {
     const pages = new Set();
     for (const it of flattenToc(toc, 0, '', [], true)) {
       if (!selectedTocIds.has(it.id)) continue;
       const r = tocSectionRange(it);
       if (r) for (let p = r.start; p <= r.end; p++) pages.add(p);
     }
+    return pages;
+  }
+  function selectedTocSpec() {
+    const pages = selectedTocPages();
     return pages.size ? pagesToSpec(pages) : null;
+  }
+
+  // toc 우클릭 "검색" — 선택한 섹션들의 페이지로 검색 범위를 좁힌다. 지울 때까지(검색 패널의 ✕, 문서 전환)
+  // 이후 / 검색에도 계속 적용되고, 검색 패널에 범위가 늘 보이게 해서 전체 검색으로 착각하지 않게 한다.
+  let searchScope = $state(null); // { pages: Set<0-indexed>, spec: '3-10,15' } | null
+  // ponytail: search_all은 그대로 전체를 훑고 결과만 거른다 — 큰 문서에서 범위 검색이 느리면 페이지 목록을 Rust로 넘길 것
+  function inSearchScope(results) {
+    const pages = searchScope?.pages;
+    return pages ? results.filter(r => pages.has(r.page)) : results;
+  }
+  function searchInTocSelection() {
+    const pages = selectedTocPages();
+    if (pages.size === 0) return;
+    searchScope = { pages, spec: pagesToSpec(pages) };
+    focusSearchTab().then(() => {
+      // 네이티브 컨텍스트 메뉴가 닫히는 중이라 포커스가 안 먹을 수 있다 — 안 그러면 mode만 'search'로 남아 키가 다 막힌다
+      requestAnimationFrame(() => { if (document.activeElement !== searchInputEl) searchInputEl?.focus(); });
+    });
+  }
+  function clearSearchScope() {
+    searchScope = null;
+    if (lastSearch) runSearch(lastSearch, false);
   }
 
   // 내보내기 페이지 스펙 기본값: 썸네일 다중 선택 > toc에서 선택해둔 헤딩(그 섹션 전체) > 없음(호출부가 현재 페이지/전체로 처리)
@@ -4725,7 +4751,8 @@
         showExportModal = true;
       },
     });
-    const menu = await Menu.new({ items: [exportItem] });
+    const searchItem = await MenuItem.new({ text: t('context.search_in_selection'), action: searchInTocSelection });
+    const menu = await Menu.new({ items: [exportItem, searchItem] });
     await menu.popup();
   }
 
@@ -6104,7 +6131,7 @@
     recentIndex = 0;
     toc = [];
     sidebarView = 'thumbs';
-    collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet();
+    collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
   }
 
   // 터미널에서 드래그&드롭 등으로 복사된 경로는 따옴표로 감싸지거나
@@ -6580,7 +6607,9 @@
     if (hwpMode) { await runHwpSearch(query); return; } // \c/\C/\r/\R, vim magic 정규식(\zs\ze 포함) 지원 — runHwpSearch 참고
     if (mdMode) { await runMdSearch(query); return; }
     try {
-      const { results, case_sensitive, regex } = await invoke('search_all', { query, caseSensitive });
+      const resp = await invoke('search_all', { query, caseSensitive });
+      const { case_sensitive, regex } = resp;
+      const results = inSearchScope(resp.results);
       caseSensitive = case_sensitive; // \c / \C 오버라이드를 Aa 아이콘에도 반영
       regexMode = regex; // \r / \R 오버라이드를 .* 아이콘에도 반영
       allSearchResults = results;
@@ -6984,6 +7013,12 @@
               <button onclick={() => { allSearchResults = []; mdSearchResults = []; pageHighlights = []; lastSearch = ''; searchQuery = ''; searchError = ''; searchInputEl?.focus(); }} title={t('search.clear')}>✕</button>
             {/if}
           </div>
+          {#if searchScope}
+            <div class="search-scope">
+              <span>{t('search.scope', { spec: searchScope.spec })}</span>
+              <button onclick={clearSearchScope} title={t('search.scope_clear')} tabindex="-1">✕</button>
+            </div>
+          {/if}
           {#if searchError}
             <div class="search-empty-hint">{t('search.error_prefix', { msg: searchError })}</div>
           {:else if lastSearch && (mdMode ? mdSearchResults.length === 0 : allSearchResults.length === 0)}
@@ -9102,6 +9137,20 @@
     box-shadow: inset 0 0 0 1px #93c5fd;
   }
 
+  .search-scope {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+    margin: 4px 0;
+    padding: 3px 6px;
+    border-radius: 3px;
+    background: rgba(58, 110, 168, 0.25);
+    color: var(--sh-21);
+    font-size: 0.75rem;
+    word-break: break-all;
+  }
+  .search-scope button { background: none; border: none; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; }
   .search-empty-hint {
     padding: 10px 4px;
     color: var(--sh-15);

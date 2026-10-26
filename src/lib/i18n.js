@@ -76,6 +76,8 @@ const DICT = {
   'search.placeholder': { ko: '검색어 입력', en: 'Search…', ja: '検索語を入力', 'zh-hans': '输入搜索词', 'zh-hant': '輸入搜尋詞', es: 'Buscar…' },
   'search.case_title': { ko: '대소문자 구분 (검색어 끝에 \\c / \\C 로 개별 오버라이드 가능)', en: 'Case sensitive (append \\c / \\C to override per search)', ja: '大文字小文字を区別 (検索語の末尾に \\c / \\C を付けて個別に上書き可能)', 'zh-hans': '区分大小写 (可在搜索词末尾加 \\c / \\C 单独覆盖)', 'zh-hant': '區分大小寫 (可在搜尋詞結尾加 \\c / \\C 個別覆寫)', es: 'Distinguir mayúsculas/minúsculas (añade \\c / \\C al final para anular por búsqueda)' },
   'search.regex_title': { ko: '정규식 검색 (vim magic 모드 문법: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze 등, 검색어 끝에 \\r / \\R 로 개별 오버라이드 가능)', en: 'Regex search (vim magic-mode syntax: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze, etc. — append \\r / \\R to override per search)', ja: '正規表現検索 (vim magicモード構文: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze など。検索語の末尾に \\r / \\R を付けて個別に上書き可能)', 'zh-hans': '正则搜索 (vim magic 模式语法: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze 等，可在搜索词末尾加 \\r / \\R 单独覆盖)', 'zh-hant': '正規表示式搜尋 (vim magic 模式語法: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze 等，可在搜尋詞結尾加 \\r / \\R 個別覆寫)', es: 'Búsqueda con expresión regular (sintaxis de modo magic de vim: \\+ \\? \\( \\) \\| \\< \\> \\zs \\ze, etc. — añade \\r / \\R al final para anular por búsqueda)' },
+  'search.scope': { ko: '검색 범위: {spec}쪽', en: 'Searching pages {spec}', ja: '検索範囲: {spec}ページ', 'zh-hans': '搜索范围: 第 {spec} 页', 'zh-hant': '搜尋範圍: 第 {spec} 頁', es: 'Buscando en las páginas {spec}' },
+  'search.scope_clear': { ko: '범위 해제 (문서 전체 검색)', en: 'Clear scope (search whole document)', ja: '範囲を解除 (文書全体を検索)', 'zh-hans': '清除范围 (搜索整个文档)', 'zh-hant': '清除範圍 (搜尋整份文件)', es: 'Quitar el rango (buscar en todo el documento)' },
   'search.clear': { ko: '검색 결과 지우기', en: 'Clear search results', ja: '検索結果をクリア', 'zh-hans': '清除搜索结果', 'zh-hant': '清除搜尋結果', es: 'Borrar resultados de búsqueda' },
   'search.error_prefix': { ko: '검색 오류: {msg}', en: 'Search error: {msg}', ja: '検索エラー: {msg}', 'zh-hans': '搜索错误: {msg}', 'zh-hant': '搜尋錯誤: {msg}', es: 'Error de búsqueda: {msg}' },
   'search.no_results': { ko: '검색 결과 없음: "{q}"', en: 'No results: "{q}"', ja: '検索結果なし: "{q}"', 'zh-hans': '无搜索结果: "{q}"', 'zh-hant': '無搜尋結果: "{q}"', es: 'Sin resultados: "{q}"' },
@@ -89,6 +91,7 @@ const DICT = {
   'context.google_search': { ko: '구글로 검색', en: 'Search with Google', ja: 'Googleで検索', 'zh-hans': '用 Google 搜索', 'zh-hant': '用 Google 搜尋', es: 'Buscar con Google' },
   'context.font_info': { ko: '폰트 정보', en: 'Font info', ja: 'フォント情報', 'zh-hans': '字体信息', 'zh-hant': '字型資訊', es: 'Información de fuente' },
   'context.delete_highlight': { ko: '하이라이트 삭제', en: 'Delete highlight', ja: 'ハイライトを削除', 'zh-hans': '删除荧光笔标记', 'zh-hant': '刪除螢光筆標記', es: 'Eliminar resaltado' },
+  'context.search_in_selection': { ko: '선택한 범위에서 검색...', en: 'Search in Selection...', ja: '選択範囲内を検索...', 'zh-hans': '在所选范围内搜索...', 'zh-hant': '在所選範圍內搜尋...', es: 'Buscar en la selección...' },
   'context.export': { ko: '내보내기...', en: 'Export...', ja: 'エクスポート...', 'zh-hans': '导出...', 'zh-hant': '匯出...', es: 'Exportar...' },
   'context.save_images': { ko: '이미지 추출...', en: 'Extract images...', ja: '画像を抽出...', 'zh-hans': '提取图片...', 'zh-hant': '擷取圖片...', es: 'Extraer imágenes...' },
 
