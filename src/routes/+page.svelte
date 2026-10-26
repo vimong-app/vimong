@@ -5133,7 +5133,15 @@
     if (showPasswordPrompt) return; // Enter/Escape는 입력창 자체 onkeydown에서 처리
     if (showPasswordManage) return; // 위와 동일
     if (showWritePasswordPrompt) return; // 위와 동일
-    if (showExportModal) return; // 위와 동일
+    if (showExportModal) {
+      // '내보내기'가 기본 버튼 — 포커스가 입력창 밖(사이드바 컨텍스트 메뉴로 연 직후 등)이어도 Enter로 실행.
+      // 버튼/select에 포커스가 있으면 그쪽 기본 동작(취소 클릭, 포맷 선택)을 그대로 둔다.
+      if (key === 'Enter' && !e.isComposing && !exportBusy && !['BUTTON', 'SELECT'].includes(e.target.tagName)) {
+        e.preventDefault();
+        doExport();
+      }
+      return;
+    }
     if (showQuitConfirm) {
       if (['Shift','Control','Alt','Meta','Enter'].includes(key)) return;
       if (e.metaKey || e.ctrlKey) return;
@@ -8182,8 +8190,8 @@
 
 <!-- ── 파일 메뉴 "내보내기" modal ── -->
 {#if showExportModal}
+  <!-- 바깥 클릭으로는 안 닫힌다 — 입력하던 설정이 실수로 날아가지 않게 Esc/취소로만 닫음 -->
   <div class="overlay" role="dialog" aria-modal="true"
-       onclick={cancelExport}
        onkeydown={(e) => e.key === 'Escape' && (e.preventDefault(), cancelExport())}>
     <div class="modal quit-modal" onclick={(e) => e.stopPropagation()}>
       <h2>{t('export.title')}</h2>
@@ -9581,8 +9589,10 @@
   }
   .password-input:focus { outline: none; border-color: #7ab4e0; }
   .password-error { font-size: 0.78rem; color: #e08080; margin-bottom: 14px; }
-  .password-confirm-btn { background: #2e5a7c; border-color: #3a6f96; color: var(--sh-23); }
-  .password-confirm-btn:hover:not(:disabled) { background: #366d94; }
+  /* 모달의 기본(Enter) 버튼 — macOS 기본 버튼처럼 채도 높은 파랑 + 흰 글씨로 회색 보조 버튼과 확실히
+     구분한다. .modal 접두사는 필수 — 없으면 .modal button(요소 선택자가 하나 더 붙음)에 우선순위가 밀려 회색으로 덮인다 */
+  .modal .password-confirm-btn { background: #0a64d6; border-color: #0a64d6; color: #fff; font-weight: 600; }
+  .modal .password-confirm-btn:hover:not(:disabled) { background: #1a74e6; }
   .password-confirm-btn:disabled { opacity: 0.4; cursor: default; }
 
   /* ── 인쇄 ── printDocument()가 인쇄 직전에 single-continuous 모드로 강제 전환해두므로
