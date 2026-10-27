@@ -1163,6 +1163,77 @@
     return links?.find(l => x >= l.rect[0] && x <= l.rect[2] && y >= l.rect[1] && y <= l.rect[3]) ?? null;
   }
 
+  // ── 내부 링크 미리보기 — 링크에 마우스를 잠깐 올리거나 F 힌트로 고르면 목적지 근처를 작은 창에
+  // 띄운다. [12]·Fig. 3 같은 참조를 보려고 f로 갔다가 ''로 돌아오는 왕복을 없앤다. 비트맵은
+  // fetchPageBitmap(화면과 같은 배율) 캐시를 그대로 쓰니, 이어서 따라가면 그 페이지는 바로 칠해진다.
+  // ponytail: 목적지가 회전된 페이지면 링크 y 좌표가 회전 전 기준이라 미리보기를 건너뛴다
+  const PREVIEW_H = 300;
+  /** @type {{link: any, left: number, top: number, w: number, h: number, hover: boolean} | null} */
+  let linkPreview = $state(null);
+  /** @type {HTMLCanvasElement | null} */
+  let linkPreviewCanvas = $state(null);
+  let linkPreviewTimer = null;
+  let linkPreviewToken = 0; // 렌더를 기다리는 사이 다른 링크로 옮겨갔으면 늦게 온 결과를 버린다
+
+  function closeLinkPreview() {
+    clearTimeout(linkPreviewTimer);
+    linkPreviewToken++;
+    linkPreview = null;
+  }
+
+  async function showLinkPreview(link, hover) {
+    hintMode = false;
+    pageLinks = [];
+    if (link.page == null) {
+      // 외부 링크는 그릴 게 없으니 주소만 보여준다(미해결 '#' 참조는 대상이 없음)
+      if (link.uri && !link.uri.startsWith('#')) statusMsg = link.uri;
+      else if (link.uri) statusMsg = t('status.link_target_missing');
+      return;
+    }
+    if (hwpMode || mdMode || getPageRotation(link.page) !== 0) return;
+    const src = pageWrapEls[link.srcPage];
+    if (!src) return;
+    const token = ++linkPreviewToken;
+    await ensurePageSize(link.page);
+    const buf = await fetchPageBitmap(link.page).catch(() => null);
+    if (!buf || token !== linkPreviewToken) return;
+    const [pw, ph] = pageDims(link.page);
+    // 본문과 같은 배율로 그린다 — 폭에 맞춰 줄이면 글씨가 너무 작아 못 읽는다. 비트맵도 이 배율이라 1:1로 선명하다.
+    // ponytail: 창보다 넓게 확대해 둔 페이지는 왼쪽부터 잘린다 — 목적지 x(dest left)를 받아오면 그쪽으로 맞출 수 있다
+    const k = scale; // 미리보기 px / 페이지 단위
+    const w = Math.min(pw * k, window.innerWidth - 16);
+    const h = Math.min(PREVIEW_H, ph * k);
+    // 목적지 줄이 위 가장자리에 붙지 않게 약간 위부터, 페이지 끝을 넘지 않게
+    const y0 = Math.max(0, Math.min((link.y ?? 0) - 12, ph - h / k));
+    // 링크 바로 아래에(아래 공간이 모자라면 위에) 띄우고, 가로는 페이지 왼쪽 가장자리에 맞춘다(창 밖으로는 안 나가게)
+    const pr = src.getBoundingClientRect();
+    const r = link.rect.map(v => v * scale);
+    const below = pr.top + r[3] + 6;
+    const top = below + h <= window.innerHeight ? below : Math.max(0, pr.top + r[1] - 6 - h);
+    const left = Math.max(8, Math.min(pr.left, window.innerWidth - w - 8));
+    linkPreview = { link, left, top, w, h, hover };
+    await tick();
+    if (token !== linkPreviewToken || !linkPreviewCanvas) return;
+    const view = new DataView(buf);
+    const bw = view.getUint32(0, true), bh = view.getUint32(4, true);
+    const off = document.createElement('canvas');
+    off.width = bw; off.height = bh;
+    off.getContext('2d').putImageData(new ImageData(new Uint8ClampedArray(buf, 8), bw, bh), 0, 0);
+    const dpr = window.devicePixelRatio || 1;
+    const ppu = bw / pw; // 비트맵 px / 페이지 단위
+    linkPreviewCanvas.width = Math.round(w * dpr);
+    linkPreviewCanvas.height = Math.round(h * dpr);
+    linkPreviewCanvas.getContext('2d').drawImage(off, 0, y0 * ppu, (w / k) * ppu, (h / k) * ppu, 0, 0, linkPreviewCanvas.width, linkPreviewCanvas.height);
+  }
+
+  // 마우스: 내부 링크에 400ms 머무르면 띄우고, 링크에서 벗어나면 닫는다
+  function scheduleHoverPreview(link, page) {
+    clearTimeout(linkPreviewTimer);
+    if (linkPreview?.hover) closeLinkPreview();
+    if (link?.page == null) return;
+    linkPreviewTimer = setTimeout(() => showLinkPreview({ ...link, srcPage: page }, true), 400);
+  }
+
   // ── 메모 아이콘 호버 커서 / 클릭 판정 — pageLinkCache와 같은 패턴 ──
   let pageNoteCache = new Map(); // page index -> note[]
   let hoverNote = $state(null);
@@ -1358,12 +1429,16 @@
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
-    hoverLink = linkAt(page, x, y);
+    const link = linkAt(page, x, y);
+    if (link !== hoverLink) { hoverLink = link; scheduleHoverPreview(link, page); }
     hoverNote = toolMode === 'note' ? noteAt(page, x, y) : null;
     hoverField = toolMode === 'pointer' ? fieldAt(page, x, y) : null;
   }
 
-  function onPageMouseLeave() { hoverLink = null; hoverNote = null; hoverField = null; }
+  function onPageMouseLeave() {
+    hoverLink = null; hoverNote = null; hoverField = null;
+    if (linkPreview?.hover) closeLinkPreview(); else clearTimeout(linkPreviewTimer);
+  }
 
   // ── SyncTeX 역방향 검색(PDF → 소스) — Shift+Cmd(⇧⌘)+클릭, Skim과 동일 ──
   // https://www.sumatrapdfreader.org/docs/LaTeX-integration 참고. 좌표는 스케일을 뺀
@@ -4809,7 +4884,9 @@
     return labels.slice(0, n);
   }
 
-  async function activateLinkHints() {
+  // preview: F — 고른 링크로 가지 않고 목적지 미리보기만 띄운다(showLinkPreview)
+  let hintPreview = false;
+  async function activateLinkHints(preview = false) {
     if (hwpMode) { statusMsg = t('status.hwp_unsupported_feature'); return; }
     if (mdMode) { statusMsg = t('status.md_unsupported_feature'); return; }
     // 연속/두 페이지 보기에서는 currentPage 말고도 다른 페이지가 동시에 화면에 보이므로
@@ -4827,6 +4904,7 @@
     const labels = makeHintLabels(links.length);
     pageLinks = links.map((l, i) => ({ ...l, label: labels[i] }));
     hintBuf = '';
+    hintPreview = preview;
     hintMode = true;
   }
 
@@ -4900,6 +4978,7 @@
   }
 
   async function followLink(link) {
+    closeLinkPreview();
     hintMode = false;
     pageLinks = [];
     if (link.page !== null && link.page !== undefined) {
@@ -5053,9 +5132,17 @@
       hintBuf += key;
       const matches = pageLinks.filter(l => l.label.startsWith(hintBuf));
       const exact = matches.find(l => l.label === hintBuf);
-      if (exact) await followLink(exact);
+      if (exact) await (hintPreview ? showLinkPreview(exact, false) : followLink(exact));
       else if (matches.length === 0) { hintMode = false; pageLinks = []; lineHintMode = false; }
       return;
+    }
+
+    // ── 링크 미리보기가 떠 있으면: Enter는 그 링크로 이동, Esc는 닫기만, 그 밖의 키는 닫고 평소대로 처리 ──
+    if (linkPreview && !['Shift','Control','Alt','Meta'].includes(key)) {
+      const l = linkPreview.link;
+      closeLinkPreview();
+      if (key === 'Enter') { e.preventDefault(); await followLink(l); return; }
+      if (key === 'Escape') { e.preventDefault(); return; }
     }
 
     // ── line hint mode: 's'로 진입, 라벨 입력으로 그 줄로 커서 — 링크 힌트와 같은 입력 규칙 ──
@@ -5724,6 +5811,8 @@
       findCharMotion(lastFind.ch, key === ';' ? lastFind.dir : -lastFind.dir, count);
     } else if (key === 'f') {
       await activateLinkHints();
+    } else if (key === 'F') {
+      await activateLinkHints(true);
     } else if (key === ':') {
       // : 입력창도 상태표시줄 안에 있어서 / 검색과 같은 이유로 프레젠테이션 중엔 막는다
       // (focusSearchTab 주석 참고).
@@ -7340,7 +7429,7 @@
   {/snippet}
 
   <!-- ── Main viewer ── -->
-  <div class="main" bind:this={mainEl} tabindex="-1" onwheel={onMainWheel} onscrollend={onMainScrollEnd}>
+  <div class="main" bind:this={mainEl} tabindex="-1" onwheel={onMainWheel} onscroll={closeLinkPreview} onscrollend={onMainScrollEnd}>
     {#if filePath}
       <!-- pageVersion이 바뀔 때마다(탭 전환/새 문서 로드) 페이지 canvas를 통째로 새로
            만든다 — 재사용된 canvas가 이전 문서의 그림을 그대로 들고 있는 채 "이미 이
@@ -7689,6 +7778,7 @@
               <tr><td>m{'{A-Z}'} / '{'{A-Z}'}</td><td>{t('shortcuts.nav.global_mark')}</td></tr>
               <tr><td>⌃O / ⌃I</td><td>{t('shortcuts.nav.jump_back_forward')}</td></tr>
               <tr><td>f</td><td>{t('shortcuts.nav.link_hint')}</td></tr>
+              <tr><td>F</td><td>{t('shortcuts.nav.link_preview')}</td></tr>
               <tr><td>f{'{c}'} / F{'{c}'} ; ,</td><td>{t('shortcuts.nav.find_char')}</td></tr>
               <tr><td>s</td><td>{t('shortcuts.nav.line_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
@@ -8426,6 +8516,12 @@
   </div>
 {/if}
 
+{#if linkPreview}
+  <div class="link-preview" style="left:{linkPreview.left}px;top:{linkPreview.top}px;width:{linkPreview.w}px;height:{linkPreview.h}px">
+    <canvas bind:this={linkPreviewCanvas}></canvas>
+  </div>
+{/if}
+
 <style>
   :global(*, *::before, *::after) { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -9039,6 +9135,19 @@
     transform: translate(-2px, -2px);
     z-index: 10;
   }
+  /* 링크 미리보기 — 목적지 페이지 일부를 링크 옆에 띄운다. 마우스를 막지 않게 pointer-events: none */
+  .link-preview {
+    position: fixed;
+    z-index: 50;
+    background: #fff;
+    border: 1px solid var(--border, #888);
+    border-radius: 4px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
+    overflow: hidden;
+    pointer-events: none;
+  }
+  .link-preview canvas { display: block; width: 100%; height: 100%; }
+  :global(body.invert-pages) .link-preview canvas { filter: invert(0.88) hue-rotate(180deg); }
   /* 줄 힌트는 줄 첫 단어를 가리지 않게 줄 왼쪽 바깥에 붙인다 */
   .link-hint.line-hint { transform: translate(calc(-100% - 3px), -1px); }
 

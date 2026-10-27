@@ -133,6 +133,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `:delm[arks] a b-d A` / `:delm!` | Delete marks (`!` deletes all a–z in this file) |
 | `Ctrl+O` / `Ctrl+I` | Jump to older / newer position — across files too, switching to or opening the file |
 | `f` | Show link hints, then jump |
+| `F` | Show link hints, then preview the target without leaving the page (`Enter` jumps there). Hovering an internal link also shows the preview |
 | `f{c}` / `F{c}`, `;` / `,` | With the cursor visible: jump to character `c` to the right / left on the line; `;` repeats, `,` repeats backward (otherwise `f` is link hints) |
 | `s` | Label each visible line — type a label to move the cursor to that line (extends a selection while selecting) |
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
