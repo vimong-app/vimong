@@ -141,4 +141,14 @@
     <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/layers.html" />
     <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/layers.html" />
   </url>
+  <url>
+    <loc>https://vimong.app/ko/features/mcp.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/mcp.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/mcp.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/mcp.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/mcp.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/mcp.html" />
+  </url>
 </urlset>
