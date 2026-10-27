@@ -3909,18 +3909,38 @@ async fn get_page_size(app: tauri::AppHandle, page_num: u32) -> Result<[f32; 2],
     }).await.map_err(|e| e.to_string())?
 }
 
-// zc(여백 빼고 폭 맞춤)용 — 페이지에서 흰색이 아닌 픽셀이 있는 영역을 [x0, y0, x1, y1]
-// (scale 1, 회전 적용된 화면 좌표)로 돌려준다. 텍스트·이미지·벡터를 가리지 않고 실제로
-// 그려지는 것 기준이라 디바이스 bbox보다 단순하고 흰 사각형 배경도 여백으로 친다.
-// 빈 페이지면 None.
-// ponytail: 저해상도(RES배) 래스터 스캔이라 오차가 1/RES pt 안팎, 정밀도가 필요하면 RES를 올릴 것
+// zc(여백 빼고 폭 맞춤)용 — RGB 픽스맵에서 배경색과 다른 픽셀이 있는 영역을 [x0, y0, x1, y1]
+// (scale 1, 회전 적용된 화면 좌표)로 돌려준다. 배경색은 페이지 가장자리(맨 위/아래 줄, 맨
+// 왼쪽/오른쪽 열) 픽셀 중 가장 많이 나오는 색으로 잡는다 — 여백은 대개 배경만 있는 곳이라
+// 흰 종이뿐 아니라 색 배경 슬라이드나 누런 스캔본도 같은 방식으로 처리된다. 텍스트·이미지·
+// 벡터를 가리지 않고 실제로 그려지는 것 기준이다. 빈 페이지면 None.
+// ponytail: 저해상도(RES배) 래스터 스캔이라 오차가 1/RES pt 안팎, 정밀도가 필요하면 RES를 올릴 것.
+// 그라데이션/사진 배경은 배경색 하나로 못 잡아 페이지 전체가 내용이 된다(= zh와 같은 결과).
 fn content_bbox(samples: &[u8], w: usize, h: usize, stride: usize) -> Option<[usize; 4]> {
-    const INK: u8 = 240;
+    // 채널 하나라도 이만큼 넘게 다르면 내용 — 스캔 노이즈/안티에일리어싱 가장자리는 흡수
+    const TOL: u8 = 24;
+    if w == 0 || h == 0 {
+        return None;
+    }
+    let px = |x: usize, y: usize| -> [u8; 3] {
+        let i = y * stride + x * 3;
+        [samples[i], samples[i + 1], samples[i + 2]]
+    };
+    let mut counts: std::collections::HashMap<[u8; 3], usize> = std::collections::HashMap::new();
+    for x in 0..w {
+        *counts.entry(px(x, 0)).or_default() += 1;
+        *counts.entry(px(x, h - 1)).or_default() += 1;
+    }
+    for y in 0..h {
+        *counts.entry(px(0, y)).or_default() += 1;
+        *counts.entry(px(w - 1, y)).or_default() += 1;
+    }
+    let bg = counts.into_iter().max_by_key(|&(_, n)| n)?.0;
+    let is_ink = |c: [u8; 3]| (0..3).any(|k| c[k].abs_diff(bg[k]) > TOL);
     let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
     for y in 0..h {
-        let row = &samples[y * stride..y * stride + w];
-        if let Some(first) = row.iter().position(|&v| v < INK) {
-            let last = row.iter().rposition(|&v| v < INK).unwrap();
+        if let Some(first) = (0..w).position(|x| is_ink(px(x, y))) {
+            let last = (0..w).rposition(|x| is_ink(px(x, y))).unwrap();
             x0 = x0.min(first);
             x1 = x1.max(last + 1);
             y0 = y0.min(y);
@@ -3934,15 +3954,43 @@ fn content_bbox(samples: &[u8], w: usize, h: usize, stride: usize) -> Option<[us
 mod content_bbox_tests {
     use super::content_bbox;
 
+    // w x h RGB 픽스맵(줄 끝 패딩 1바이트)을 bg로 채운다
+    fn pixmap(w: usize, h: usize, bg: [u8; 3]) -> (Vec<u8>, usize) {
+        let stride = w * 3 + 1;
+        let mut px = vec![0u8; stride * h];
+        for y in 0..h {
+            for x in 0..w {
+                px[y * stride + x * 3..y * stride + x * 3 + 3].copy_from_slice(&bg);
+            }
+        }
+        (px, stride)
+    }
+
+    fn set(px: &mut [u8], stride: usize, x: usize, y: usize, c: [u8; 3]) {
+        px[y * stride + x * 3..y * stride + x * 3 + 3].copy_from_slice(&c);
+    }
+
     #[test]
-    fn finds_ink_and_ignores_blank() {
-        // 4x3, stride 5(패딩 1바이트) — (1,1)~(2,1)에만 잉크
-        let mut px = vec![255u8; 15];
-        px[5 + 1] = 0;
-        px[5 + 2] = 100;
-        px[4] = 0; // 패딩 바이트는 무시돼야 함
-        assert_eq!(content_bbox(&px, 4, 3, 5), Some([1, 1, 3, 2]));
-        assert_eq!(content_bbox(&[255u8; 12], 4, 3, 4), None);
+    fn finds_ink_on_white() {
+        let (mut px, stride) = pixmap(5, 4, [255, 255, 255]);
+        set(&mut px, stride, 1, 1, [0, 0, 0]);
+        set(&mut px, stride, 3, 2, [200, 200, 200]);
+        assert_eq!(content_bbox(&px, 5, 4, stride), Some([1, 1, 4, 3]));
+    }
+
+    #[test]
+    fn finds_light_text_on_dark_background() {
+        let navy = [20, 30, 80];
+        let (mut px, stride) = pixmap(5, 4, navy);
+        set(&mut px, stride, 2, 1, [255, 255, 255]);
+        set(&mut px, stride, 3, 1, [30, 38, 90]); // 배경과 거의 같은 색(노이즈)은 무시
+        assert_eq!(content_bbox(&px, 5, 4, stride), Some([2, 1, 3, 2]));
+    }
+
+    #[test]
+    fn blank_page_has_no_content() {
+        let (px, stride) = pixmap(5, 4, [240, 230, 200]);
+        assert_eq!(content_bbox(&px, 5, 4, stride), None);
     }
 }
 
@@ -3957,7 +4005,7 @@ async fn get_page_content_bbox(app: tauri::AppHandle, page_num: u32, rotation: f
             let page = doc.load_page(page_num as i32).map_err(|e| e.to_string())?;
             let mut matrix = Matrix::new_scale(RES, RES);
             matrix.rotate(rotation);
-            page.to_pixmap(&matrix, &Colorspace::device_gray(), false, true)
+            page.to_pixmap(&matrix, &Colorspace::device_rgb(), false, true)
                 .map_err(|e| e.to_string())?
         };
         let bbox = content_bbox(pixmap.samples(), pixmap.width() as usize, pixmap.height() as usize, pixmap.stride() as usize);
