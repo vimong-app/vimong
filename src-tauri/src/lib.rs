@@ -1790,6 +1790,53 @@ fn update_note(
     }
 }
 
+// 메모 아이콘 이동(드래그) — 아이콘이 본문 글자를 가릴 때 옆으로 치우는 용도. 크기·색·내용은
+// 그대로 두고 왼쪽 위 좌표(x, y)만 바꾼다. update_note와 같은 패턴이라 undo 스택은 안 건드린다.
+#[tauri::command]
+fn move_note(state: State<Mutex<AppState>>, page_num: u32, xref: i32, x: f32, y: f32) -> Result<(), String> {
+    let (doc, path) = {
+        let mut s = state.lock().unwrap();
+        let tab = s.tab_mut();
+        let path = tab.path.clone().ok_or("No document open")?;
+        let doc = tab.doc.take().ok_or("No document open")?;
+        (doc, path)
+    };
+
+    let result: Result<Document, String> = (|| {
+        let mut pdf: PdfDocument = doc.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+        let page: mupdf::Page = pdf.load_page(page_num as i32).map_err(|e| e.to_string())?;
+        let page: PdfPage = page.try_into().map_err(|e: mupdf::Error| e.to_string())?;
+        let mut annot = find_annot_by_xref(&page, xref).ok_or("이동할 메모를 찾지 못했습니다")?;
+        let r = annot.rect().map_err(|e| e.to_string())?;
+        let rect = [x, y, x + (r.x1 - r.x0), y + (r.y1 - r.y0)];
+        let color = match annot.color().map_err(|e| e.to_string())? {
+            Some(AnnotationColor::Rgb { red, green, blue }) => [red, green, blue],
+            _ => [1.0, 0.85, 0.4],
+        };
+        annot.set_rect(Rect::new(rect[0], rect[1], rect[2], rect[3])).map_err(|e| e.to_string())?;
+        annot.update().map_err(|e| e.to_string())?;
+        set_flat_note_icon(&mut pdf, &mut annot, rect, color).map_err(|e| e.to_string())?;
+        Ok((*pdf).clone())
+    })();
+
+    let mut s = state.lock().unwrap();
+    let tab = s.tab_mut();
+    match result {
+        Ok(updated) => {
+            tab.doc = Some(updated);
+            tab.dirty = true;
+            Ok(())
+        }
+        Err(e) => {
+            drop(s);
+            if let Ok(reopened) = Document::open(&path) {
+                state.lock().unwrap().tab_mut().doc = Some(reopened);
+            }
+            Err(e)
+        }
+    }
+}
+
 // 주석 삭제(메모/하이라이트/도형 공통). xref로 특정 주석 하나만 정확히 지운다(같은 페이지의
 // 다른 메모/하이라이트/도형은 안 건드림) — 타입을 안 가리므로 어떤 주석이든 xref만 알면 지울 수 있다.
 #[tauri::command]
@@ -5627,6 +5674,7 @@ pub fn run() {
             page_image_count,
             export_page_images,
             update_note,
+            move_note,
             delete_annotation,
             undo_annotation,
             get_page_form_fields,

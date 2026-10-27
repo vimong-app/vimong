@@ -1464,6 +1464,7 @@
       return;
     }
     if (toolMode === 'note' && !hwpMode) {
+      if (suppressNoteClick) { suppressNoteClick = false; return; }
       const rect = e.currentTarget.getBoundingClientRect();
       const x = (e.clientX - rect.left) / scale;
       const y = (e.clientY - rect.top) / scale;
@@ -1473,6 +1474,9 @@
       if (hit) {
         notePending = { page, x: hit.rect[0], y: hit.rect[1], xref: hit.xref };
         noteText = hit.contents;
+        // 사이드바 메모 목록에서도 같은 메모를 활성화해 보이게 한다
+        selectedNoteXref = hit.xref;
+        notesResultEls[allNotes.findIndex(n => n.xref === hit.xref)]?.scrollIntoView({ block: 'nearest' });
       } else {
         notePending = { page, x, y, xref: null };
         noteText = '';
@@ -2098,6 +2102,18 @@
     if ((e.metaKey || e.ctrlKey) && e.shiftKey) return; // SyncTeX 역방향 검색(⇧⌘/⇧⌃+클릭) — onPageClick이 처리
     if (getPageRotation(page) !== 0) return;
     if (e.button !== 0) return; // 우클릭(컨텍스트 메뉴)까지 여기로 들어와 기존 선택을 지워버렸다
+    if (toolMode === 'note' && !hwpMode) {
+      // 메모 아이콘을 잡으면 드래그로 옮길 수 있다(아이콘이 글자를 가릴 때). 안 움직이고 떼면 onPageClick이 편집창을 연다
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = (e.clientX - rect.left) / scale;
+      const y = (e.clientY - rect.top) / scale;
+      const hit = noteAt(page, x, y);
+      if (hit) {
+        e.preventDefault();
+        noteDrag = { page, xref: hit.xref, w: hit.rect[2] - hit.rect[0], h: hit.rect[3] - hit.rect[1], dx: x - hit.rect[0], dy: y - hit.rect[1], x: hit.rect[0], y: hit.rect[1], startX: e.clientX, startY: e.clientY, moved: false };
+        return;
+      }
+    }
     if (shapeMode) {
       e.preventDefault();
       const rect = e.currentTarget.getBoundingClientRect();
@@ -2125,6 +2141,42 @@
     cursor = null;
     visualMode = false;
     pendingStart = { page, idx };
+  }
+
+  let noteDrag = $state(null); // { page, xref, w, h, dx, dy, x, y, startX, startY, moved } — 메모 아이콘 드래그 중
+  let suppressNoteClick = false; // 드래그로 옮긴 직후 따라오는 click이 편집창을 열지 않게
+
+  function onNoteDragMove(e) {
+    if (!noteDrag || noteDrag.saving) return;
+    const wrap = pageWrapEls[noteDrag.page];
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
+    const moved = noteDrag.moved || Math.hypot(e.clientX - noteDrag.startX, e.clientY - noteDrag.startY) > 3;
+    noteDrag = { ...noteDrag, moved, x: (e.clientX - rect.left) / scale - noteDrag.dx, y: (e.clientY - rect.top) / scale - noteDrag.dy };
+  }
+
+  async function endNoteDrag() {
+    if (!noteDrag || noteDrag.saving) return;
+    const { page, xref, x, y, moved } = noteDrag;
+    if (!moved) { noteDrag = null; return; }
+    // 새 비트맵이 올 때까지 미리보기 원을 놓은 자리에 남겨둔다 — 바로 지우면 아이콘이 옮겨지기 전 빈 틈이 보인다
+    noteDrag = { ...noteDrag, saving: true };
+    // click은 mouseup 직후 동기로 오므로, 페이지 밖에서 놓아 click이 안 오면 다음 틱에 풀어준다
+    suppressNoteClick = true;
+    setTimeout(() => { suppressNoteClick = false; });
+    try {
+      await invoke('move_note', { pageNum: page, xref, x, y });
+      pageNoteCache.delete(page);
+      ++thumbVersion;
+      await refreshPageBitmap(page);
+      noteDrag = null;
+      statusMsg = t('status.note_moved');
+      // 사이드바 목록 갱신은 전 페이지를 훑어 느리니 아이콘이 옮겨진 다음에
+      if (sidebarView === 'notes') await refreshNotesList();
+    } catch (err) {
+      noteDrag = null;
+      statusMsg = `Error: ${err}`;
+    }
   }
 
   function onSelectionDragMove(e) {
@@ -3069,6 +3121,15 @@
   // ── Search state ───────────────────────────────────────────
   let allSearchResults = $state([]); // { page, hit_count, rects }[]
   let allNotes = $state([]); // { page, xref, rect, contents }[] — 사이드바 "메모" 탭
+  // 사이드바에서 고른 메모 — 같은 페이지에 메모가 여럿이면 목록·페이지 아이콘 어느 쪽이 그건지 구분해 보여준다.
+  // 그 페이지를 벗어나면 예전처럼 "현재 페이지의 메모 전부"를 강조한다.
+  let selectedNoteXref = $state(null);
+  let selectedNote = $derived(allNotes.find(n => n.xref === selectedNoteXref && n.page === currentPage) ?? null);
+
+  async function gotoNote(note) {
+    selectedNoteXref = note.xref;
+    await gotoPage(note.page);
+  }
   let pageHighlights = $state([]);   // [x0, y0, x1, y1][] for current page
   let hlsearchOn = $state(true);     // :nohlsearch(:noh)로 끔 — 검색 결과/커서는 그대로 두고
                                       // 하이라이트 표시만 숨긴다. 새 검색이나 n/N에서 다시 켠다.
@@ -3497,7 +3558,7 @@
     // 상태 초기화
     filePath = ''; invoke('set_document_menu_enabled', { enabled: false });
     pageCount = 0; currentPage = 0; scale = 1.0;
-    thumbnails = []; allSearchResults = []; mdSearchResults = []; pageHighlights = []; allNotes = [];
+    thumbnails = []; allSearchResults = []; mdSearchResults = []; pageHighlights = []; allNotes = []; selectedNoteXref = null;
     lastSearch = ''; searchResultIdx = 0;
     statusMsg = 'No file open.  :e to open';
     toc = []; sidebarView = 'thumbs'; collapsed = new SvelteSet(); selectedTocId = null; selectedTocIds = new SvelteSet(); searchScope = null;
@@ -5527,7 +5588,7 @@
           e.preventDefault(); numBuf = '';
           const nextIdx = down ? Math.min(idx + n, allNotes.length - 1) : Math.max(idx - n, 0);
           focusNearestItem(notesResultEls, nextIdx);
-          await gotoPage(allNotes[nextIdx].page);
+          await gotoNote(allNotes[nextIdx]);
           return;
         }
       } else if (sidebarView === 'layers') {
@@ -6767,8 +6828,8 @@
     // 떼고 h/v/0/z를 누르는 일반적인 입력) 프리픽스를 유지해야 zh/zv/z0/zz가 동작한다.
     if (e.key === 'z') { zHeld = false; if (zUsed && pendingPrefix === 'z') pendingPrefix = ''; }
   }}
-  onmousemove={(e) => { onSidebarResizeMove(e); onSelectionDragMove(e); }}
-  onmouseup={(e) => { stopSidebarResize(); stopSelectionDrag(e); }}
+  onmousemove={(e) => { onSidebarResizeMove(e); onSelectionDragMove(e); onNoteDragMove(e); }}
+  onmouseup={(e) => { stopSidebarResize(); stopSelectionDrag(e); endNoteDrag(); }}
   onpointermove={onTabDragMove}
   onpointerup={endTabDrag}
 />
@@ -7174,12 +7235,12 @@
           {#each allNotes as note, i}
             <div
               class="search-result-item"
-              class:active={note.page === currentPage}
+              class:active={selectedNote ? note === selectedNote : note.page === currentPage}
               bind:this={notesResultEls[i]}
               role="button"
               tabindex="-1"
-              onclick={() => gotoPage(note.page)}
-              onkeydown={(e) => e.key === 'Enter' && gotoPage(note.page)}
+              onclick={() => gotoNote(note)}
+              onkeydown={(e) => e.key === 'Enter' && gotoNote(note)}
             >
               <span class="result-page">p.<span class="note-page-num">{note.page + 1}</span></span>
               <span class="note-snippet">{note.contents.trim() || t('note.empty_snippet')}</span>
@@ -7336,6 +7397,13 @@
         {#if textSelectMode && caretRect && cursor?.page === i}
           <!-- vim 일반 모드처럼 글자를 덮는 블록 커서 — 왼쪽 막대로 그리면 e(단어 끝 글자에 놓임)가 마지막 글자 "앞"에 있는 것처럼 보였다 -->
           <div class="text-caret" style="left:{caretRect[0]*scale}px;top:{caretRect[1]*scale}px;width:{Math.max((caretRect[2]-caretRect[0])*scale, 2)}px;height:{(caretRect[3]-caretRect[1])*scale}px"></div>
+        {/if}
+        {#if sidebarVisible && sidebarView === 'notes' && selectedNote?.page === i && getPageRotation(i) === 0}
+          {@const r = selectedNote.rect}
+          <div class="note-selected" style="left:{r[0]*scale}px;top:{r[1]*scale}px;width:{(r[2]-r[0])*scale}px;height:{(r[3]-r[1])*scale}px"></div>
+        {/if}
+        {#if noteDrag?.moved && noteDrag.page === i}
+          <div class="note-selected note-drag-ghost" style="left:{noteDrag.x*scale}px;top:{noteDrag.y*scale}px;width:{noteDrag.w*scale}px;height:{noteDrag.h*scale}px"></div>
         {/if}
         {#if i === currentPage && hlsearchOn}
           {#each pageHighlights as r}
@@ -9008,6 +9076,16 @@
     background: rgba(255, 230, 0, 0.65);
     outline: 2px solid #ffd400;
   }
+
+  .note-selected {
+    position: absolute;
+    /* 메모 아이콘(원) 모양을 따라 바로 바깥에 링 — outline은 구형 WebKit에서 radius를 안 따라가서 box-shadow로 */
+    border-radius: 50%;
+    box-shadow: 0 0 0 2px #3b82f6;
+    pointer-events: none;
+  }
+
+  .note-drag-ghost { background: rgba(59, 130, 246, 0.25); }
 
   .highlight.selecting {
     background: rgba(78, 143, 199, 0.35);
