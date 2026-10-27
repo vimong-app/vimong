@@ -1743,6 +1743,28 @@
     }
   }
 
+  // MCP add_highlight — 위치(rects)는 MCP가 찾아 보내고, 여기선 사용자가 칠할 때와 같은 커맨드로
+  // 추가만 한다(:w 전엔 미저장, u로 취소). 코멘트는 하이라이트 끝에 메모로 붙인다.
+  async function addMcpHighlight(h) {
+    const idx = findOpenTab(h.path);
+    if (idx === -1) return; // ponytail: 그사이 탭을 닫았으면 조용히 무시 — AI 쪽엔 성공으로 보인다
+    try {
+      if (idx !== currentTabIdx) await switchToTab(idx);
+      await invoke('add_highlight', { pageNum: h.page, rects: h.rects, color: hexToRgbFloat(h.color ?? highlightColor), opacity: highlightOpacity });
+      pageHighlightAnnotCache.delete(h.page);
+      if (h.comment) {
+        await invoke('add_note', { pageNum: h.page, x: h.note[0], y: h.note[1], text: h.comment, color: hexToRgbFloat(noteColor) });
+        pageNoteCache.delete(h.page);
+        if (sidebarView === 'notes') await refreshNotesList();
+      }
+      ++thumbVersion;
+      await refreshPageBitmap(h.page);
+      statusMsg = t('status.ai_highlight_added');
+    } catch (e) {
+      statusMsg = `Error: ${e}`;
+    }
+  }
+
   // 우클릭 메뉴 "하이라이트 삭제"
   async function deleteHighlight(page, xref) {
     try {
@@ -3853,6 +3875,7 @@
     unlistenFns.push(await listen('forward-search', (e) => handleForwardSearch(e.payload)));
     // MCP goto_page — 이미 떠 있는 인스턴스로만 온다(MCP가 열린 문서가 있을 때만 보냄)
     unlistenFns.push(await listen('goto-page', (e) => gotoPage(e.payload)));
+    unlistenFns.push(await listen('mcp-highlight', (e) => addMcpHighlight(e.payload)));
 
     // Finder/브라우저에서 PDF를 더블클릭해 열었을 때 — forward-search와 같은 패턴. 이 시점에
     // 세션 복원(위)이 이미 탭을 채워놨을 수 있으니, 지금 탭이 비어 있을 때만(진짜 콜드 스타트로

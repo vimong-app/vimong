@@ -105,6 +105,21 @@ fn handle(method: &str, params: &Value) -> Result<Value, String> {
                 "inputSchema": { "type": "object", "properties": { "page": { "type": "integer", "description": "1-based page number." } }, "required": ["page"] },
             },
             {
+                "name": "add_highlight",
+                "description": "Highlight a passage in the PDF currently open in Vimong, optionally with a comment shown as a sticky note next to it. Give the first few words of the passage as start and its last few words as end (omit end to highlight just start), copied from get_page_text; matching ignores case, spaces, punctuation and hyphenation. The highlight is added unsaved, like one the user made: they save it with :w or undo it with u. Returns the highlighted text so you can check the span.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "page": { "type": "integer", "description": "1-based page number. Defaults to the page the user is currently viewing." },
+                        "start": { "type": "string", "description": "First words of the passage, unique on the page." },
+                        "end": { "type": "string", "description": "Last words of the passage. Omit to highlight start alone." },
+                        "comment": { "type": "string", "description": "Optional comment, added as a sticky note at the end of the highlight." },
+                        "color": { "type": "string", "description": "Optional #RRGGBB color. Defaults to the user's highlight color." },
+                    },
+                    "required": ["start"],
+                },
+            },
+            {
                 "name": "get_outline",
                 "description": "Return the table of contents (outline/bookmarks) of the document currently open in Vimong, with 1-based page numbers. Use it to map chapter or section names to page ranges.",
                 "inputSchema": { "type": "object", "properties": {} },
@@ -133,9 +148,9 @@ const MAX_IMAGE_PAGES: usize = 5; // 페이지 이미지는 한 장에 수백 KB
 
 // 결과는 MCP content 배열 — 대부분 텍스트 하나, get_page_image만 이미지 여러 개
 fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
-    const TOOLS: [&str; 9] = [
+    const TOOLS: [&str; 10] = [
         "get_current_view", "save_pages", "save_markdown", "get_page_text", "get_notes", "get_outline",
-        "get_selection", "get_page_image", "goto_page",
+        "get_selection", "get_page_image", "goto_page", "add_highlight",
     ];
     if !TOOLS.contains(&name) {
         return Err(format!("unknown tool: {name}"));
@@ -154,21 +169,10 @@ fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
             if page == 0 || page > page_count {
                 return Err(format!("page must be between 1 and {page_count}"));
             }
-            // 이미 떠 있는 앱으로 single-instance 인자 전달(forward-search와 같은 경로) — 자식은
-            // 인자만 넘기고 바로 끝난다. 출력이 MCP stdout에 섞이면 안 되니 버린다.
-            // ponytail: current_view.json이 비정상 종료로 남아 있으면 앱이 새로 뜬다(페이지 이동은 무시됨)
-            let status = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
-                .args(["--goto-page", &page.to_string()])
-                .stdin(std::process::Stdio::null())
-                .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .status()
-                .map_err(|e| e.to_string())?;
-            if !status.success() {
-                return Err(format!("failed to signal Vimong ({status})"));
-            }
+            signal_app(&["--goto-page", &page.to_string()])?;
             return Ok(text(format!("Moved Vimong to page {page}")));
         }
+        "add_highlight" => return add_highlight(args, &view).map(text),
         _ => {}
     }
     let pages = page_spec(args, &view, name == "get_notes");
@@ -179,6 +183,157 @@ fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
         return page_images(path, &pages, page_count, scale);
     }
     call_text_tool(name, args, &view, &pages).map(text)
+}
+
+// 이미 떠 있는 앱으로 single-instance 인자 전달(forward-search와 같은 경로) — 자식은
+// 인자만 넘기고 바로 끝난다. 출력이 MCP stdout에 섞이면 안 되니 버린다.
+// ponytail: current_view.json이 비정상 종료로 남아 있으면 앱이 새로 뜬다(전달한 동작은 무시됨)
+fn signal_app(args: &[&str]) -> Result<(), String> {
+    let status = std::process::Command::new(std::env::current_exe().map_err(|e| e.to_string())?)
+        .args(args)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map_err(|e| e.to_string())?;
+    if !status.success() {
+        return Err(format!("failed to signal Vimong ({status})"));
+    }
+    Ok(())
+}
+
+const NOTE_ICON_SIZE: f32 = 18.0; // lib.rs add_note의 ICON_SIZE와 같게
+const MIN_CANDIDATE_CHARS: usize = 4; // 못 찾았을 때 후보로 보여줄 최소 일치 길이(정규화 글자 수)
+
+// 위치는 여기서(디스크 파일로) 찾고 앱엔 좌표만 넘긴다 — 앱으로 보내는 신호는 응답이 없어서,
+// 못 찾았을 때 AI에게 이유와 후보를 돌려주려면 매칭을 이쪽에서 끝내야 한다. 하이라이트는
+// 글자 위치를 바꾸지 않으니 디스크 파일과 앱이 들고 있는 미저장 문서의 글자 좌표는 같다.
+fn add_highlight(args: &Value, view: &Value) -> Result<String, String> {
+    let path = view["path"].as_str().ok_or("invalid view state")?;
+    let page_count = view["page_count"].as_u64().unwrap_or(0);
+    let page = args["page"].as_u64().or(view["page"].as_u64()).unwrap_or(0);
+    if page == 0 || page > page_count {
+        return Err(format!("page must be between 1 and {page_count}"));
+    }
+    let start = args["start"].as_str().ok_or("start is required")?;
+    let color = args["color"].as_str();
+    if color.is_some_and(|c| c.len() != 7 || !c.starts_with('#') || !c[1..].chars().all(|h| h.is_ascii_hexdigit())) {
+        return Err("color must be #RRGGBB".to_string());
+    }
+    let doc = open_doc(path)?;
+    if !doc.is_pdf() {
+        return Err("Highlights are only supported for PDF files".to_string());
+    }
+    let load = |p: u64| doc.load_page(p as i32 - 1).map_err(|e| e.to_string());
+    let pg = load(page)?;
+    let chars = super::extract_chars(&pg)?;
+    let hay = normalize(chars.iter().map(|(c, _)| *c));
+    let needle = |s: &str| normalize(s.chars()).into_iter().map(|(c, _)| c).collect::<Vec<_>>();
+
+    let s = needle(start);
+    if s.is_empty() {
+        return Err("start must contain letters or digits".to_string());
+    }
+    let a = match find_all(&hay, &s)[..] {
+        [a] => a,
+        [] => {
+            let mut msg = format!("Could not find \"{start}\" on page {page}.");
+            let elsewhere: Vec<String> = (1..=page_count)
+                .filter(|&p| p != page)
+                .filter(|&p| {
+                    load(p).and_then(|pg| super::extract_chars(&pg)).is_ok_and(|cs| !find_all(&normalize(cs.iter().map(|(c, _)| *c)), &s).is_empty())
+                })
+                .map(|p| p.to_string())
+                .collect();
+            if !elsewhere.is_empty() {
+                msg += &format!(" It appears on page {}.", elsewhere.join(", "));
+            } else if let Some(at) = (MIN_CANDIDATE_CHARS..s.len()).rev().find_map(|k| find_all(&hay, &s[..k]).first().copied()) {
+                // ponytail: 앞부분이 가장 길게 맞는 곳만 후보로 — 앞쪽 단어가 틀린 경우엔 후보가 없다
+                let snippet: String = chars[hay[at].1..].iter().map(|(c, _)| *c).take(start.chars().count() + 40).collect();
+                msg += &format!(" Closest text there: \"{}\"", snippet.trim());
+            }
+            return Err(msg + " Copy start/end verbatim from get_page_text.");
+        }
+        ref hits => return Err(format!("\"{start}\" appears {} times on page {page} — use a longer start.", hits.len())),
+    };
+    let mut b = a + s.len();
+    if let Some(end) = args["end"].as_str().filter(|e| !e.is_empty()) {
+        let e = needle(end);
+        let rel = find_all(&hay[a..], &e).first().copied().filter(|_| !e.is_empty());
+        b = a + rel.ok_or_else(|| format!("Found start on page {page} but not \"{end}\" after it."))? + e.len();
+    }
+    let span = &chars[span_range(&chars, hay[a].1, hay[b - 1].1)];
+    let rects = line_rects(span);
+    let last = rects.last().ok_or("matched text has no position")?;
+    let width = pg.bounds().map_err(|e| e.to_string())?.x1;
+
+    let payload = json!({
+        "path": path,
+        "page": page - 1,
+        "rects": rects,
+        "color": color,
+        "comment": args["comment"].as_str().filter(|c| !c.trim().is_empty()),
+        "note": [(last[2] + 2.0).min(width - NOTE_ICON_SIZE), last[1]],
+    });
+    signal_app(&["--mcp-highlight", &payload.to_string()])?;
+    let text: String = span.iter().map(|(c, _)| *c).collect();
+    Ok(format!("Highlighted on page {page}: \"{}\" (unsaved — the user saves with :w or undoes with u)", text.trim()))
+}
+
+// 글자·숫자만 소문자로 남기고(합자는 풀어서) 원래 몇 번째 글자였는지 함께 기록한다 — 하이픈,
+// 따옴표, 대시, 공백, Markdown 기호처럼 옮겨 적으며 달라지기 쉬운 것은 전부 비교에서 빠진다.
+fn normalize(text: impl Iterator<Item = char>) -> Vec<(char, usize)> {
+    let mut out = Vec::new();
+    for (i, c) in text.enumerate() {
+        let lig = match c {
+            'ﬀ' => "ff",
+            'ﬁ' => "fi",
+            'ﬂ' => "fl",
+            'ﬃ' => "ffi",
+            'ﬄ' => "ffl",
+            _ => "",
+        };
+        let expanded: Vec<char> = if lig.is_empty() { vec![c] } else { lig.chars().collect() };
+        out.extend(expanded.into_iter().flat_map(char::to_lowercase).filter(|c| c.is_alphanumeric()).map(|c| (c, i)));
+    }
+    out
+}
+
+// 비교에서 빠진 앞뒤 문장부호(따옴표, 마침표, 괄호)도 단어에 붙어 있으면 같이 칠한다
+fn span_range(chars: &[(char, mupdf::Quad)], mut i0: usize, mut i1: usize) -> std::ops::RangeInclusive<usize> {
+    let punct = |i: usize| chars.get(i).is_some_and(|(c, _)| !c.is_alphanumeric() && !c.is_whitespace());
+    while i0 > 0 && punct(i0 - 1) {
+        i0 -= 1;
+    }
+    while punct(i1 + 1) {
+        i1 += 1;
+    }
+    i0..=i1
+}
+
+fn find_all(hay: &[(char, usize)], pat: &[char]) -> Vec<usize> {
+    if pat.is_empty() {
+        return vec![];
+    }
+    hay.windows(pat.len()).enumerate().filter(|(_, w)| w.iter().map(|(c, _)| c).eq(pat)).map(|(i, _)| i).collect()
+}
+
+// 글자 사각형을 줄 단위로 합친다 — 세로 범위가 겹치고 오른쪽으로 이어지면 같은 줄
+fn line_rects(span: &[(char, mupdf::Quad)]) -> Vec<[f32; 4]> {
+    let mut rects: Vec<[f32; 4]> = Vec::new();
+    for (c, q) in span {
+        if c.is_whitespace() {
+            continue;
+        }
+        let r = super::quad_to_rect(q);
+        match rects.last_mut() {
+            Some(l) if r[1] < l[3] && r[3] > l[1] && r[0] >= l[0] => {
+                *l = [l[0].min(r[0]), l[1].min(r[1]), l[2].max(r[2]), l[3].max(r[3])];
+            }
+            _ => rects.push(r),
+        }
+    }
+    rects
 }
 
 // pages 인자 해석 — 생략=현재 페이지(get_notes만 전체), "all"=전체, 나머지는 "1-3,7" 형식 그대로
@@ -396,10 +551,37 @@ mod tests {
     #[test]
     fn lists_tools_and_reports_unknown_method() {
         let tools = handle("tools/list", &Value::Null).unwrap();
-        assert_eq!(tools["tools"].as_array().unwrap().len(), 9);
+        assert_eq!(tools["tools"].as_array().unwrap().len(), 10);
         assert!(handle("nope", &Value::Null).is_err());
         let r = handle("tools/call", &json!({ "name": "nope", "arguments": {} })).unwrap();
         assert_eq!(r["isError"], true);
+    }
+
+    #[test]
+    fn normalized_match_ignores_hyphens_quotes_and_markdown() {
+        let page = "the \u{201c}atten-\ntion\u{201d} mechanism is e\u{fb03}cient";
+        let hay = normalize(page.chars());
+        let pat = |s: &str| normalize(s.chars()).into_iter().map(|(c, _)| c).collect::<Vec<_>>();
+        let hits = find_all(&hay, &pat("**\"Attention\" Mechanism"));
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hay[hits[0]].1, page.chars().position(|c| c == 'a').unwrap()); // 원래 글자 위치로 되짚기
+        assert_eq!(find_all(&hay, &pat("efficient")).len(), 1);
+        assert!(find_all(&hay, &pat("attention model")).is_empty());
+    }
+
+    #[test]
+    fn passage_across_lines_becomes_one_rect_per_line() {
+        let doc = open_doc(concat!(env!("CARGO_MANIFEST_DIR"), "/../testdata/synctex-demo.pdf")).unwrap();
+        let chars = crate::extract_chars(&doc.load_page(0).unwrap()).unwrap();
+        let hay = normalize(chars.iter().map(|(c, _)| *c));
+        let pat = |s: &str| normalize(s.chars()).into_iter().map(|(c, _)| c).collect::<Vec<_>>();
+        let (s, e) = (pat("This is line 8"), pat("this exact line."));
+        let a = find_all(&hay, &s)[0];
+        let b = a + find_all(&hay[a..], &e)[0] + e.len();
+        let span = &chars[span_range(&chars, hay[a].1, hay[b - 1].1)];
+        let text: String = span.iter().map(|(c, _)| *c).collect();
+        assert_eq!(text.split_whitespace().collect::<Vec<_>>().join(" "), "This is line 8 of the source. Ctrl(or Cmd)+click on this sentence in the rendered PDF and it should jump back to this exact line.");
+        assert_eq!(line_rects(span).len(), 2);
     }
 
     #[test]

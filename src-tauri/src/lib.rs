@@ -5340,6 +5340,10 @@ pub fn run() {
             if let Some(n) = args.iter().position(|a| a == "--goto-page").and_then(|i| args.get(i + 1)?.parse::<u32>().ok()) {
                 let _ = app.emit("goto-page", n.saturating_sub(1));
             }
+            // MCP add_highlight(vimong --mcp-highlight <json>) — 위치는 MCP가 찾아 좌표만 넘어온다
+            if let Some(h) = args.iter().position(|a| a == "--mcp-highlight").and_then(|i| serde_json::from_str::<serde_json::Value>(args.get(i + 1)?).ok()) {
+                let _ = app.emit("mcp-highlight", h);
+            }
             if let Some(w) = app.get_webview_window("main") {
                 let _ = w.set_focus();
             }

@@ -87,6 +87,7 @@ Or with **Claude Desktop**, in `~/Library/Application Support/Claude/claude_desk
 | `get_notes` | Your highlights (with the highlighted text) and notes |
 | `get_outline` | Table of contents with page numbers |
 | `goto_page` | Move Vimong to a page |
+| `add_highlight` | Highlight a passage (found by its first and last words), optionally with a comment note — unsaved until `:w`, undo with `u` |
 | `save_pages` | Save pages as a new PDF |
 | `save_markdown` | Save pages as a Markdown file |
 
