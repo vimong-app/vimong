@@ -4895,25 +4895,54 @@
 
   // toc 항목 우클릭 — 그 헤딩(하위 섹션 포함)의 페이지 범위를 내보내기 스펙으로 미리 채운다.
   // 우클릭한 항목이 다중 선택 안에 있으면 선택 전체, 밖이면 썸네일처럼 그 항목 하나로 선택을 바꾼다.
-  async function onTocContextMenu(e, item) {
+  // 네이티브 메뉴(Menu.popup) 대신 앱 안에 그린다 — 네이티브 메뉴가 떠 있는 동안엔 OS가 키를 가져가
+  // j/k가 안 먹고, OS마다 모양도 달라서. at: 키보드로 열 때 띄울 위치(항목 바로 아래), 생략하면 마우스 위치.
+  function onTocContextMenu(e, item, at) {
     e.preventDefault();
     if (mdMode || item.page === null) return; // 마크다운은 페이지 PNG로 내보낼 개념이 없음
     selectedTocId = item.id;
     if (!selectedTocIds.has(item.id)) { selectedTocIds = new SvelteSet([item.id]); tocSelectAnchor = item.id; }
-    const exportItem = await MenuItem.new({
-      text: t('context.export'),
-      action: () => {
-        exportFormat = 'png';
-        exportFilename = defaultExportFilename();
-        exportPageSpec = (selectedTocIds.size > 1 ? selectedTocSpec() : tocSectionSpec(item)) ?? String(item.page + 1);
-        exportMerge = false; exportPassword = ''; exportError = '';
-        showExportModal = true;
-      },
-    });
-    const searchItem = await MenuItem.new({ text: t('context.search_in_selection'), action: searchInTocSelection });
-    const menu = await Menu.new({ items: [exportItem, searchItem] });
-    await menu.popup();
+    const exportAction = () => {
+      exportFormat = 'png';
+      exportFilename = defaultExportFilename();
+      exportPageSpec = (selectedTocIds.size > 1 ? selectedTocSpec() : tocSectionSpec(item)) ?? String(item.page + 1);
+      exportMerge = false; exportPassword = ''; exportError = '';
+      showExportModal = true;
+    };
+    appMenu = {
+      x: at?.x ?? e.clientX, y: at?.y ?? e.clientY, idx: at ? 0 : -1,
+      items: [
+        { label: t('context.export'), action: exportAction },
+        { label: t('context.search_in_selection'), action: searchInTocSelection },
+      ],
+      returnFocus: document.activeElement,
+    };
   }
+
+  // 앱 메뉴 — { x, y, idx, items: {label, action}[], returnFocus }. 키보드는 handleKeydown 맨 앞에서 처리
+  let appMenu = $state(null);
+  let appMenuEl = $state(null);
+
+  function closeAppMenu() {
+    const el = appMenu?.returnFocus;
+    appMenu = null;
+    el?.focus?.();
+  }
+
+  function runAppMenuItem(i) {
+    const item = appMenu?.items[i];
+    closeAppMenu();
+    item?.action();
+  }
+
+  // 창 밖으로 넘치면 안쪽으로 당긴다 — 네이티브 메뉴와 달리 창 밖엔 그릴 수 없다
+  $effect(() => {
+    if (!appMenu || !appMenuEl) return;
+    const r = appMenuEl.getBoundingClientRect();
+    const x = Math.max(4, Math.min(appMenu.x, window.innerWidth - r.width - 4));
+    const y = appMenu.y + r.height > window.innerHeight - 4 ? Math.max(4, appMenu.y - r.height) : appMenu.y;
+    if (x !== appMenu.x || y !== appMenu.y) appMenu = { ...appMenu, x, y };
+  });
 
   function toggleTocNode(id) {
     if (collapsed.has(id)) collapsed.delete(id);
@@ -5205,6 +5234,18 @@
     // 단축키로 새지 않게 여기서 막는다. Escape만 넘겨서 포커스를 내려놓을 수 있게 한다.
     if (document.activeElement?.classList?.contains('field-live-input')) {
       if (key === 'Escape') { document.activeElement.blur(); e.preventDefault(); }
+      return;
+    }
+
+    // ── 앱 메뉴(목차 우클릭 메뉴)가 떠 있으면 j/k·↑/↓로 이동, Enter/Space 실행, Esc 닫기. 다른 키는 삼킨다 ──
+    if (appMenu) {
+      if (['Shift','Control','Alt','Meta'].includes(key)) return;
+      e.preventDefault();
+      const n = appMenu.items.length;
+      if (key === 'j' || key === 'ArrowDown') appMenu.idx = (appMenu.idx + 1) % n;
+      else if (key === 'k' || key === 'ArrowUp') appMenu.idx = appMenu.idx <= 0 ? n - 1 : appMenu.idx - 1;
+      else if ((key === 'Enter' || key === ' ') && appMenu.idx !== -1) runAppMenuItem(appMenu.idx);
+      else if (key === 'Escape') closeAppMenu();
       return;
     }
 
@@ -5607,6 +5648,16 @@
           focusNearestItem(attachmentsResultEls, nextIdx);
           return;
         }
+      }
+    }
+
+    // ── TOC 항목에 포커스가 있을 때 o(또는 메뉴 키·Shift+F10)로 우클릭 메뉴 열기 ──
+    if (sidebarView === 'toc' && (key === 'o' || key === 'ContextMenu' || (key === 'F10' && e.shiftKey))) {
+      const idx = tocItemEls.indexOf(document.activeElement);
+      if (idx !== -1) {
+        const r = tocItemEls[idx].getBoundingClientRect();
+        onTocContextMenu(e, flatToc[idx], { x: r.left, y: r.bottom });
+        return;
       }
     }
 
@@ -6537,6 +6588,23 @@
   function cancelExport() {
     showExportModal = false;
   }
+
+  // 내보내기 창(완료 창까지)이 닫히면 열기 전 포커스(목차 항목 등)로 되돌린다 — 안 그러면 포커스가
+  // body에 남아 테두리는 안 보이는데 키는 본문 기준으로 동작한다. 닫으면서 다른 창(페이지 범위
+  // 도움말 등)이 포커스를 가져갔으면 건드리지 않는다. $effect.pre라 모달이 그려지기 전 포커스를 잡는다.
+  let exportReturnFocus = null;
+  $effect.pre(() => {
+    const open = showExportModal || !!exportDonePaths;
+    if (open) {
+      exportReturnFocus ??= document.activeElement;
+    } else if (exportReturnFocus) {
+      const el = exportReturnFocus;
+      exportReturnFocus = null;
+      tick().then(() => {
+        if (el.isConnected && (!document.activeElement || document.activeElement === document.body)) el.focus();
+      });
+    }
+  });
 
   // ":export [-m] [pagespec] <path>" — :w와 같은 인자 문법, 포맷은 경로 확장자로 정한다.
   // -m은 여러 페이지를 파일 하나로 합친다(:w -p의 -p와 같은 자리).
@@ -7879,6 +7947,7 @@
               <tr><td>Tab</td><td>{t('shortcuts.nav.sidebar_focus')}</td></tr>
               <tr><td>{t('shortcuts.nav.sidebar_jk_key')}</td><td>{t('shortcuts.nav.sidebar_jk_desc')}</td></tr>
               <tr><td>{t('shortcuts.nav.toc_hl_key')}</td><td>{t('shortcuts.nav.toc_hl_desc')}</td></tr>
+              <tr><td>{t('shortcuts.nav.toc_menu_key')}</td><td>{t('shortcuts.nav.toc_menu_desc')}</td></tr>
               <tr><td>⌘⇧T</td><td>{t('shortcuts.nav.toggle_sidebar')}</td></tr>
               <tr><td>p</td><td>{t('shortcuts.nav.presentation')}</td></tr>
               <tr><td>gi</td><td>{t('shortcuts.nav.page_invert')}</td></tr>
@@ -8607,6 +8676,17 @@
   </div>
 {/if}
 
+{#if appMenu}
+  <!-- 바깥 클릭·우클릭은 이 막에 걸려 메뉴만 닫힌다 -->
+  <div class="app-menu-backdrop" role="presentation" onmousedown={closeAppMenu} oncontextmenu={(e) => { e.preventDefault(); closeAppMenu(); }}></div>
+  <div class="app-menu" role="menu" bind:this={appMenuEl} style="left:{appMenu.x}px;top:{appMenu.y}px">
+    {#each appMenu.items as item, i}
+      <div class="app-menu-item" class:active={i === appMenu.idx} role="menuitem" tabindex="-1"
+           onmouseenter={() => (appMenu.idx = i)} onclick={() => runAppMenuItem(i)} onkeydown={() => {}}>{item.label}</div>
+    {/each}
+  </div>
+{/if}
+
 {#if linkPreview}
   <div class="link-preview" style="left:{linkPreview.left}px;top:{linkPreview.top}px;width:{linkPreview.w}px;height:{linkPreview.h}px">
     <canvas bind:this={linkPreviewCanvas}></canvas>
@@ -9236,6 +9316,23 @@
     transform: translate(-2px, -2px);
     z-index: 10;
   }
+  .app-menu-backdrop { position: fixed; inset: 0; z-index: 60; }
+  .app-menu {
+    position: fixed;
+    z-index: 61;
+    min-width: 180px;
+    padding: 4px;
+    background: var(--sh-2);
+    color: var(--sh-22);
+    border: 1px solid var(--sh-8);
+    border-radius: 6px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    font-size: 0.82rem;
+    user-select: none;
+  }
+  .app-menu-item { padding: 4px 10px; border-radius: 4px; cursor: default; white-space: nowrap; }
+  .app-menu-item.active { background: rgba(58, 110, 168, 0.8); color: #fff; } /* .toc-selected와 같은 파란색 */
+
   /* 링크 미리보기 — 목적지 페이지 일부를 링크 옆에 띄운다. 마우스를 막지 않게 pointer-events: none */
   .link-preview {
     position: fixed;
