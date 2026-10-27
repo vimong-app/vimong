@@ -175,6 +175,7 @@ const DICT = {
   'font.mono': { ko: '고정폭', en: 'Mono', ja: '等幅', 'zh-hans': '等宽', 'zh-hant': '等寬', es: 'Monoespaciada' },
   'shortcuts.zoom.reset': { ko: '100% 크기', en: '100% size', ja: '100%表示', 'zh-hans': '100% 大小', 'zh-hant': '100% 大小', es: 'Tamaño 100%' },
   'shortcuts.zoom.fit_width': { ko: '가로 맞춤', en: 'Fit width', ja: '幅に合わせる', 'zh-hans': '适合宽度', 'zh-hant': '符合寬度', es: 'Ajustar al ancho' },
+  'shortcuts.zoom.fit_content': { ko: '여백 빼고 가로 맞춤', en: 'Fit content width (skip margins)', ja: '余白を除いて幅に合わせる', 'zh-hans': '去除页边距适合宽度', 'zh-hant': '去除頁邊距符合寬度', es: 'Ajustar al ancho del contenido (sin márgenes)' },
   'shortcuts.zoom.fit_height': { ko: '세로 맞춤', en: 'Fit height', ja: '高さに合わせる', 'zh-hans': '适合高度', 'zh-hant': '符合高度', es: 'Ajustar a la altura' },
 
   'shortcuts.file.open_dialog': { ko: '파일 열기 (다이얼로그)', en: 'Open file (dialog)', ja: 'ファイルを開く (ダイアログ)', 'zh-hans': '打开文件 (对话框)', 'zh-hant': '開啟檔案 (對話框)', es: 'Abrir archivo (diálogo)' },

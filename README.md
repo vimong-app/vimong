@@ -149,6 +149,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `zi` / `zo` | Zoom in / out |
 | `z0` | 100% size (`150z0` = 150%) |
 | `zh` | Fit width |
+| `zc` | Fit content width (margins skipped) |
 | `zv` / `zz` | Fit height |
 | `Cmd++` / `Cmd+-` | Zoom in / out |
 

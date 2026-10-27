@@ -3909,6 +3909,62 @@ async fn get_page_size(app: tauri::AppHandle, page_num: u32) -> Result<[f32; 2],
     }).await.map_err(|e| e.to_string())?
 }
 
+// zc(여백 빼고 폭 맞춤)용 — 페이지에서 흰색이 아닌 픽셀이 있는 영역을 [x0, y0, x1, y1]
+// (scale 1, 회전 적용된 화면 좌표)로 돌려준다. 텍스트·이미지·벡터를 가리지 않고 실제로
+// 그려지는 것 기준이라 디바이스 bbox보다 단순하고 흰 사각형 배경도 여백으로 친다.
+// 빈 페이지면 None.
+// ponytail: 저해상도(RES배) 래스터 스캔이라 오차가 1/RES pt 안팎, 정밀도가 필요하면 RES를 올릴 것
+fn content_bbox(samples: &[u8], w: usize, h: usize, stride: usize) -> Option<[usize; 4]> {
+    const INK: u8 = 240;
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for y in 0..h {
+        let row = &samples[y * stride..y * stride + w];
+        if let Some(first) = row.iter().position(|&v| v < INK) {
+            let last = row.iter().rposition(|&v| v < INK).unwrap();
+            x0 = x0.min(first);
+            x1 = x1.max(last + 1);
+            y0 = y0.min(y);
+            y1 = y + 1;
+        }
+    }
+    (x1 > x0).then_some([x0, y0, x1, y1])
+}
+
+#[cfg(test)]
+mod content_bbox_tests {
+    use super::content_bbox;
+
+    #[test]
+    fn finds_ink_and_ignores_blank() {
+        // 4x3, stride 5(패딩 1바이트) — (1,1)~(2,1)에만 잉크
+        let mut px = vec![255u8; 15];
+        px[5 + 1] = 0;
+        px[5 + 2] = 100;
+        px[4] = 0; // 패딩 바이트는 무시돼야 함
+        assert_eq!(content_bbox(&px, 4, 3, 5), Some([1, 1, 3, 2]));
+        assert_eq!(content_bbox(&[255u8; 12], 4, 3, 4), None);
+    }
+}
+
+#[tauri::command]
+async fn get_page_content_bbox(app: tauri::AppHandle, page_num: u32, rotation: f32) -> Result<Option<[f32; 4]>, String> {
+    const RES: f32 = 2.0;
+    tauri::async_runtime::spawn_blocking(move || {
+        let pixmap = {
+            let state = app.state::<Mutex<AppState>>();
+            let s = state.lock().unwrap();
+            let doc = s.tab().doc.as_ref().ok_or("No document open")?;
+            let page = doc.load_page(page_num as i32).map_err(|e| e.to_string())?;
+            let mut matrix = Matrix::new_scale(RES, RES);
+            matrix.rotate(rotation);
+            page.to_pixmap(&matrix, &Colorspace::device_gray(), false, true)
+                .map_err(|e| e.to_string())?
+        };
+        let bbox = content_bbox(pixmap.samples(), pixmap.width() as usize, pixmap.height() as usize, pixmap.stride() as usize);
+        Ok(bbox.map(|b| b.map(|v| v as f32 / RES)))
+    }).await.map_err(|e| e.to_string())?
+}
+
 // 연속/두 페이지 보기 모드는 스크롤 컨테이너에 모든 페이지 자리를 미리 예약해야 해서
 // 문서를 열 때(혹은 그 보기 모드로 전환할 때) 페이지마다 get_page_size를 왕복하는 대신
 // 한 번의 Mutex 잠금으로 전체 크기를 몰아서 가져온다.
@@ -5694,6 +5750,7 @@ pub fn run() {
             cancel_font_analysis,
             get_page_size,
             get_all_page_sizes,
+            get_page_content_bbox,
             search_page,
             search_all,
             get_page_links,

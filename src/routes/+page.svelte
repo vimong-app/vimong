@@ -3850,7 +3850,7 @@
     if (presentationMode) { clearTimeout(resizeFitTimer); resizeFitTimer = setTimeout(fitPresentationPage, 150); return; }
     if (viewMode !== 'single-continuous' && viewMode !== 'two-continuous') return;
     clearTimeout(resizeFitTimer);
-    resizeFitTimer = setTimeout(fitToWidth, 150);
+    resizeFitTimer = setTimeout(scale === contentFitScale ? fitToContentWidth : fitToWidth, 150);
   }
 
   async function fitToHeight() {
@@ -3867,6 +3867,42 @@
     scale = Math.round((available / pageH) * 100) / 100;
     await rerenderNow();
   }
+
+  // zc — 여백을 뺀 실제 내용 폭에 맞추고, 가로 스크롤을 내용 왼쪽 끝으로 옮긴다. 페이지를
+  // 진짜로 잘라내는 게 아니라 확대+가로 스크롤이라 링크/하이라이트/커서 좌표는 그대로다.
+  // 두 페이지 보기는 페이지 사이 여백까지 겹쳐 의미가 없고, hwp는 bbox를 못 구해서 zh로 대신한다.
+  // 창 크기가 바뀌어도 zc 상태를 유지하도록 그때의 scale을 기억해 둔다(scheduleResizeFit).
+  let contentFitScale = null;
+  async function fitToContentWidth() {
+    if (!filePath || mdMode) return;
+    if (hwpMode || isTwoUp(viewMode)) { await fitToWidth(); return; }
+    const page = currentPage;
+    const bbox = await invoke('get_page_content_bbox', { pageNum: page, rotation: getPageRotation(page) });
+    if (!bbox) { await fitToWidth(); return; }
+    const [x0, , x1] = bbox;
+    const available = (mainEl?.clientWidth ?? window.innerWidth) - 40;
+    scale = Math.round((available / (x1 - x0)) * 100) / 100;
+    contentFitScale = scale;
+    await rerenderNow();
+    alignContentLeft(page, x0);
+  }
+
+  function alignContentLeft(page, x0) {
+    const wrap = pageWrapEls[page];
+    if (!wrap || !mainEl) return;
+    mainEl.scrollLeft += wrap.getBoundingClientRect().left + x0 * scale - mainEl.getBoundingClientRect().left - 20;
+  }
+
+  // zc 상태로 다른 페이지에 가면 배율은 그대로 두고 그 페이지 내용의 왼쪽 끝으로 가로 스크롤만
+  // 다시 맞춘다 — 홀/짝 페이지처럼 여백 위치가 다르면 안 그러면 왼쪽 여백이 그대로 드러난다.
+  $effect(() => {
+    const page = currentPage;
+    untrack(async () => {
+      if (scale !== contentFitScale || !filePath || mdMode || hwpMode || isTwoUp(viewMode)) return;
+      const bbox = await invoke('get_page_content_bbox', { pageNum: page, rotation: getPageRotation(page) });
+      if (bbox && page === currentPage && scale === contentFitScale) alignContentLeft(page, bbox[0]);
+    });
+  });
 
   // macOS에서 전체화면 전환 시 webview가 remount되는 경우가 있어(아래 openFile 복원 주석
   // 참고), onMount가 다시 돌 때마다 리스너를 계속 쌓기만 하면 전체화면을 반복할수록 메뉴/
@@ -5716,7 +5752,7 @@
         // 대신한다 — scale(캔버스 렌더 배율)과 별개로 CSS 폰트 크기 배율만 바꾼다(triggerRerender 불필요).
         if (key === 'i') { mdScale = Math.min(+(mdScale + 0.1 * zc).toFixed(2), 3); return; }
         if (key === 'o') { mdScale = Math.max(+(mdScale - 0.1 * zc).toFixed(2), 0.5); return; }
-        if (['0', 'h', 'v', 'z'].includes(key)) { mdScale = 1.0; return; }
+        if (['0', 'h', 'c', 'v', 'z'].includes(key)) { mdScale = 1.0; return; }
         return;
       }
       if (epubReflowable) {
@@ -5732,6 +5768,7 @@
       if (key === 'o') { scale = Math.max(+(scale - 0.25 * zc).toFixed(2), 0.25); triggerRerender(); return; }
       if (key === '0') { scale = zN ? Math.min(Math.max(zN / 100, 0.25), 12) : 1.0; triggerRerender(); return; }
       if (key === 'h') { await fitToWidth(); return; }
+      if (key === 'c') { await fitToContentWidth(); return; }
       if (key === 'v' || key === 'z') { await fitToHeight(); return; }
     }
 
@@ -7959,6 +7996,7 @@
               <tr><td>zo</td><td>{t('shortcuts.zoom.out')}</td></tr>
               <tr><td>z0</td><td>{t('shortcuts.zoom.reset')}</td></tr>
               <tr><td>zh</td><td>{t('shortcuts.zoom.fit_width')}</td></tr>
+              <tr><td>zc</td><td>{t('shortcuts.zoom.fit_content')}</td></tr>
               <tr><td>zv / zz</td><td>{t('shortcuts.zoom.fit_height')}</td></tr>
               <tr><td>⌘+</td><td>{t('shortcuts.zoom.in')}</td></tr>
               <tr><td>⌘−</td><td>{t('shortcuts.zoom.out')}</td></tr>
