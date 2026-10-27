@@ -140,6 +140,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
 | `p` | Presentation mode (fullscreen slideshow) |
 | `gi` / `:set invert` | Toggle page dark mode (invert page colors) |
+| `o` / Menu key / `Shift+F10` (TOC focused) | Open the TOC entry menu (export, search in selection) |
 
 ### Zoom
 
