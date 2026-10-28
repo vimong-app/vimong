@@ -3735,17 +3735,6 @@ Line:6\nColumn:-1\nSyncTeX result end\n";
     }
 }
 
-// get_page_chars의 OCR 폴백이 같은 페이지를 또 래스터화하지 않도록, 가장 최근에 render_page가
-// 그린 원본 RGBA를 하나만 들고 있는다(문서당 최대 한 페이지 분량 — 다음 렌더 때 덮어씀).
-// 구조체 자체는 플랫폼 무관하게 두고 .manage()도 무조건 등록해서 macOS 전용 cfg를
-// invoke_handler 체인 중간에 끼워 넣지 않아도 되게 한다 — non-macOS에선 그냥 항상 None.
-struct LastRender {
-    page: u32,
-    w: u32,
-    h: u32,
-    rgba: Vec<u8>,
-}
-
 // MuPDF의 alpha 채널 pixmap은 premultiplied RGBA다("over" 합성을 premultiplied로 계산하기
 // 때문). 브라우저 Canvas의 putImageData는 straight(비premultiplied) alpha를 기대하므로,
 // 완전 불투명(a=255)/완전 투명(a=0)만 있던 지금까지는 둘이 같아서 문제가 없었지만, 하이라이트에
@@ -3792,11 +3781,6 @@ async fn render_page(app: tauri::AppHandle, page_num: u32, scale: f32, rotation:
         let h = pixmap.height();
         unpremultiply_rgba(pixmap.samples_mut());
         let samples = pixmap.samples();
-        #[cfg(target_os = "macos")]
-        {
-            let cache = app.state::<Mutex<Option<LastRender>>>();
-            *cache.lock().unwrap() = Some(LastRender { page: page_num, w, h, rgba: samples.to_vec() });
-        }
         let mut out = Vec::with_capacity(8 + samples.len());
         out.extend_from_slice(&w.to_le_bytes());
         out.extend_from_slice(&h.to_le_bytes());
@@ -5429,28 +5413,14 @@ async fn get_page_chars(app: tauri::AppHandle, page_num: u32) -> Result<Vec<Text
             let chars = extract_chars_with_font(&page)?;
             if chars.is_empty() {
                 // 임베드 텍스트가 하나도 없으면(순수 스캔 이미지 PDF) Vision OCR로 폴백.
-                // 화면 표시용 render_page가 이미 이 페이지를 그려뒀으면(대개 그렇다 —
-                // 화면에 보이는 페이지라 텍스트 선택을 시도하는 것이므로) 그 결과를 그대로
-                // 재사용해 똑같은 페이지를 두 번 래스터화하지 않는다.
-                let cache = app.state::<Mutex<Option<LastRender>>>();
-                let cached = cache.lock().unwrap();
-                let png = if let Some(lr) = cached.as_ref().filter(|lr| lr.page == page_num) {
-                    let mut pixmap = mupdf::Pixmap::new_with_w_h(&Colorspace::device_rgb(), lr.w as i32, lr.h as i32, true)
-                        .map_err(|e| e.to_string())?;
-                    pixmap.samples_mut().copy_from_slice(&lr.rgba);
-                    let mut png = Vec::new();
-                    pixmap.write_to(&mut png, ImageFormat::PNG).map_err(|e| e.to_string())?;
-                    png
-                } else {
-                    drop(cached);
-                    // 아직 표시용 렌더가 없었던 페이지(예: 화면 밖 페이지에 검색으로 바로
-                    // 이동) — 화면 배율과 무관하게 OCR 품질용 고정 배율(216dpi 상당)로 렌더
-                    let matrix = Matrix::new_scale(3.0, 3.0);
-                    let pixmap = page.to_pixmap(&matrix, &Colorspace::device_rgb(), false, true).map_err(|e| e.to_string())?;
-                    let mut png = Vec::new();
-                    pixmap.write_to(&mut png, ImageFormat::PNG).map_err(|e| e.to_string())?;
-                    png
-                };
+                // 화면 배율과 무관하게 OCR 품질용 고정 배율(216dpi 상당)로 새로 그린다 — 예전엔
+                // render_page 결과를 통째로 복사해 두고(LastRender) 재사용했는데, 그 복사본이
+                // 렌더할 때마다(고배율이면 한 장에 100MB) 생겨 메모리를 크게 잡아먹었다. OCR은
+                // 스캔 페이지에서만 드물게 도니 다시 그리는 비용이 훨씬 싸다.
+                let matrix = Matrix::new_scale(3.0, 3.0);
+                let pixmap = page.to_pixmap(&matrix, &Colorspace::device_rgb(), false, true).map_err(|e| e.to_string())?;
+                let mut png = Vec::new();
+                pixmap.write_to(&mut png, ImageFormat::PNG).map_err(|e| e.to_string())?;
                 let bounds = page.bounds().map_err(|e| e.to_string())?;
                 let (w, h) = (bounds.x1 - bounds.x0, bounds.y1 - bounds.y0);
                 PageCharsResult::NeedsOcr { png, page_w: w, page_h: h }
@@ -5505,7 +5475,6 @@ pub fn run() {
         .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_window_state::Builder::default().build())
         .manage(Mutex::new(AppState::new()))
-        .manage(Mutex::new(None::<LastRender>))
         .manage(CancelFlag(AtomicBool::new(false)))
         .manage(QuitConfirmed(AtomicBool::new(false)))
         .manage(SavedWindowFrame(Mutex::new(None)))

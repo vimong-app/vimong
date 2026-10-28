@@ -1096,6 +1096,7 @@
   }
 
   async function fetchPageBitmap(i) {
+    if (destroyed) throw new Error('destroyed');
     const key = `${i}:${scale}:${getPageRotation(i)}`;
     if (pageBitmapCache.has(key)) {
       const entry = pageBitmapCache.get(key);
@@ -1137,6 +1138,7 @@
   // 닿았을 때 IPC 왕복 없이 바로 붙고 바로 칠할 수 있어야, 그 사이 들어오는 휠 이벤트를 못
   // 쓰고 흘려버리거나 안 칠해진 캔버스가 잠깐 노출되는 일이 없다.
   function prefetchAdjacentSizes(page) {
+    if (destroyed) return;
     if (page > 0) { ensurePageSize(page - 1); fetchPageBitmap(page - 1); }
     if (page < pageCount - 1) { ensurePageSize(page + 1); fetchPageBitmap(page + 1); }
   }
@@ -2739,6 +2741,10 @@
   // 정체를 만들고, 그동안 쌓인 키 입력이 몰아서 처리되며 오래된 입력이 그 시점엔 안 맞는
   // currentPage를 기준으로 실행되는(예: f로 놓은 링크 힌트가 엉뚱한 페이지 링크를 여는)
   // 문제까지 이어졌다. 동시 요청 수를 클라이언트에서 직접 제한해서 완화한다.
+  // 컴포넌트가 파괴된 뒤(개발 중 HMR 새로고침, macOS 전체화면 전환 리마운트)에도 이 인스턴스의
+  // 대기열·타이머가 살아 있으면 아무도 안 볼 페이지를 계속 render_page로 요청한다 — 고배율에선
+  // 한 장에 수십~100MB라, 새로고침이 몰리면 Rust 쪽에 응답 버퍼가 GB 단위로 쌓였다.
+  let destroyed = false;
   let activePageLoads = 0;
   const pendingPageLoads = [];
   const MAX_CONCURRENT_PAGE_LOADS = 2;
@@ -2803,6 +2809,9 @@
   }
 
   async function loadMainPageAt(i, version) {
+    // 대기열에서 기다리는 사이 문서/탭이 바뀌었거나 컴포넌트가 파괴됐으면 그리지 않는다 — 예전엔
+    // 렌더가 끝난 뒤에야 버전을 확인해서 버릴 페이지도 끝까지 그리고 전송했다
+    if (destroyed || version !== pageVersion) return;
     const canvas = pageCanvasRefs[i];
     // "이미 이 배율로 그려졌나"를 페이지 인덱스가 아니라 canvas 노드 자체(dataset)에 표시한다 —
     // 'two'/'single' 모드에서 페이지를 넘기면 이전 canvas는 사라지고 새 빈 canvas가 그 자리에
@@ -3912,6 +3921,11 @@
   let mainResizeObserver;
   const unlistenFns = [];
   onDestroy(() => {
+    destroyed = true;
+    pendingPageLoads.length = 0;
+    pendingThumbLoads.length = 0;
+    clearTimeout(lazyZoomTimer);
+    clearTimeout(resizeFitTimer);
     mainResizeObserver?.disconnect();
     window.removeEventListener('afterprint', restorePrintState);
     for (const fn of unlistenFns) fn?.();
@@ -5240,7 +5254,7 @@
 
   async function loadThumbAt(i, version) {
     await thumbScaleReady;
-    if (version !== thumbVersion || thumbnails[i]?.loaded) return;
+    if (destroyed || version !== thumbVersion || thumbnails[i]?.loaded) return;
     try {
       const src = await invoke('render_thumbnail', { pageNum: i, scale: thumbScale });
       if (version !== thumbVersion) return; // 로딩 도중 다른 문서로 바뀌었으면 버림
