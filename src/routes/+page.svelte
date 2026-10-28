@@ -13,6 +13,7 @@
   import { LANGS, LANG_NAMES, loadLangPref, saveLangPref, detectSystemLang, t as t_ } from '$lib/i18n.js';
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
+  import SplitPane from '$lib/SplitPane.svelte';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
   const SUPPORTED_EXTENSIONS = ['pdf', 'xps', 'epub', 'cbz', 'svg', 'docx', 'xlsx', 'pptx', 'png', 'gif', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'];
@@ -3149,7 +3150,7 @@
   let cmdInput = $state('');
 
   // execCommand이 인식하는 명령어 이름 전체 — Tab 자동완성 후보 목록.
-  const COMMAND_NAMES = ['q', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm'];
+  const COMMAND_NAMES = ['q', 'split', 'sp', 'vsplit', 'vs', 'only', 'close', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm'];
   const PATH_ARG_COMMANDS = ['e', 'w', 'export']; // 인자로 경로를 받는 명령 — 여기만 경로 자동완성 대상
   const MD_SUBCOMMANDS = ['code', 'preview', 'split', 'theme']; // :md 서브명령 Tab 자동완성 후보
   const SET_OPTIONS = ['invert', 'noinvert', 'invert!', 'lang=']; // :set 옵션 Tab 자동완성 후보 (execCommand의 :set 분기와 맞출 것)
@@ -5687,6 +5688,25 @@
       }
     }
 
+    // ── Ctrl-w {w,p,h,j,k,l}: 창 전환, Ctrl-w {o,c,q}: 분할 창 닫기 ──
+    if (pendingWin) {
+      if (['Shift','Control','Alt','Meta'].includes(key)) return;
+      pendingWin = false;
+      e.preventDefault();
+      const k = key.toLowerCase();
+      // vim처럼 방향을 따른다 — 분할 창은 :split이면 위, :vsplit이면 왼쪽. 그쪽 키면 분할 창,
+      // 반대쪽이면 메인 창, 다른 축(좌우 분할에서 j/k 등)이면 창이 없으니 그대로 둔다.
+      const toSplit = split === 'v' ? { h: true, l: false } : { k: true, j: false };
+      const dir = { ArrowLeft: 'h', ArrowDown: 'j', ArrowUp: 'k', ArrowRight: 'l' }[key] ?? key;
+      if (k === 'w' || k === 'p') await setSplitActive(!splitActive);
+      else if (dir in toSplit) await setSplitActive(toSplit[dir]);
+      else if (k === 'c' || k === 'q') await closeWindow(true);
+      else if (k === 'o') await closeWindow(false);
+      return;
+    }
+    if (split && e.ctrlKey && !e.metaKey && key === 'w') { e.preventDefault(); pendingWin = true; return; }
+    if (split && splitActive && !presentationMode && !isFocusInSidebar() && await splitRef?.handleKey(e)) return;
+
     // ── TOC 항목에 포커스가 있을 때 o(또는 메뉴 키·Shift+F10)로 우클릭 메뉴 열기 ──
     if (sidebarView === 'toc' && (key === 'o' || key === 'ContextMenu' || (key === 'F10' && e.shiftKey))) {
       const idx = tocItemEls.indexOf(document.activeElement);
@@ -6031,6 +6051,50 @@
       await copySelection();
     }
   }
+
+  // ── :split / :vsplit — 같은 문서를 두 번째 창(SplitPane)으로 나란히 본다. 어느 창이 키를 받을지는
+  // DOM 포커스가 아니라 splitActive로 정한다 — :명령이나 모달을 거치면 포커스가 body로 빠져서
+  // DOM 포커스만으로는 활성 창을 잃는다. 탭 전환/다른 파일 열기면 닫는다(render_page는 현재 탭 문서를 그린다).
+  let split = $state(null); // null | 'h'(:split, 위아래) | 'v'(:vsplit, 좌우)
+  let splitActive = $state(false);
+  let splitPage = $state(0);
+  let splitRef = $state();
+  let pendingWin = false; // Ctrl-w 다음 키 대기
+
+  async function openSplit(dir) {
+    if (!filePath || mdMode || hwpMode) { statusMsg = t('status.split_unsupported'); return; }
+    if (!split) splitPage = currentPage; // vim처럼 새 창은 지금 보던 곳에서 시작
+    split = dir;
+    await setSplitActive(true);
+  }
+
+  function closeSplit() {
+    if (!split) return;
+    split = null;
+    splitActive = false;
+    mainEl?.focus();
+  }
+
+  // vim의 창 닫기 흉내 — 메인 창은 실제로 없앨 수 없으니, "메인 창을 닫는다"는 메인 창이 분할
+  // 창이 보던 위치로 옮겨 가고 분할 창을 없애는 것으로 한다(남는 쪽 화면이 그대로 이어짐).
+  // :q/:close/Ctrl-w c·q는 지금 창을, :only/Ctrl-w o는 다른 창을 닫는다.
+  async function closeWindow(current) {
+    const closingMain = current ? !splitActive : splitActive;
+    const v = closingMain ? splitRef?.view() : null;
+    closeSplit();
+    if (v) await gotoPageAndY(v.page, v.y);
+  }
+
+  async function setSplitActive(on) {
+    splitActive = on && !!split;
+    await tick();
+    if (splitActive) splitRef?.focus(); else mainEl?.focus();
+  }
+
+  $effect(() => {
+    filePath;
+    untrack(closeSplit);
+  });
 
   function isFocusInSidebar() {
     return !!document.querySelector('.sidebar-content')?.contains(document.activeElement);
@@ -6718,7 +6782,13 @@
 
   async function execCommand(cmd) {
     cmd = cmd.trim();
-    if (cmd === 'q' || cmd === 'tabclose' || cmd === 'tabc') {
+    if (split && (cmd === 'q' || cmd === 'close' || cmd === 'clo')) {
+      await closeWindow(true); // 분할 중엔 탭이 아니라 지금 창만 닫는다(vim과 같음)
+    } else if (split && (cmd === 'only' || cmd === 'on')) {
+      await closeWindow(false);
+    } else if (cmd === 'split' || cmd === 'sp' || cmd === 'vsplit' || cmd === 'vs') {
+      await openSplit(cmd.startsWith('v') ? 'v' : 'h');
+    } else if (cmd === 'q' || cmd === 'tabclose' || cmd === 'tabc') {
       await closeTab(currentTabIdx);
     } else if (cmd === 'tabnew' || cmd === 'tabe') {
       await newTab();
@@ -7625,7 +7695,14 @@
   {/snippet}
 
   <!-- ── Main viewer ── -->
-  <div class="main" bind:this={mainEl} tabindex="-1" onwheel={onMainWheel} onscroll={closeLinkPreview} onscrollend={onMainScrollEnd}>
+  <div class="main-area" class:split-h={split === 'h'}>
+  {#if split}
+    {#key pageVersion}
+      <SplitPane bind:this={splitRef} bind:page={splitPage} rotationOf={getPageRotation} initialScale={scale}
+                 active={splitActive} onactivate={() => splitActive = true} />
+    {/key}
+  {/if}
+  <div class="main" class:split-inactive={split && splitActive} bind:this={mainEl} tabindex="-1" onmousedown={() => splitActive = false} onwheel={onMainWheel} onscroll={closeLinkPreview} onscrollend={onMainScrollEnd}>
     {#if filePath}
       <!-- pageVersion이 바뀔 때마다(탭 전환/새 문서 로드) 페이지 canvas를 통째로 새로
            만든다 — 재사용된 canvas가 이전 문서의 그림을 그대로 들고 있는 채 "이미 이
@@ -7726,6 +7803,7 @@
         </div>
       </div>
     {/if}
+  </div>
   </div>
 
 </div>
@@ -8051,6 +8129,9 @@
               <tr><td>ngt</td><td>{t('shortcuts.tab.goto_n')}</td></tr>
               <tr><td>g&lt;Tab&gt;</td><td>{t('shortcuts.tab.last')}</td></tr>
               <tr><td>⌘⇧R</td><td>{t('shortcuts.tab.reopen')}</td></tr>
+              <tr><td>Ctrl-w w / Ctrl-w h·j·k·l</td><td>{t('shortcuts.tab.split_switch')}</td></tr>
+              <tr><td>Ctrl-w c / Ctrl-w q</td><td>{t('shortcuts.tab.split_close')}</td></tr>
+              <tr><td>Ctrl-w o</td><td>{t('shortcuts.tab.split_only')}</td></tr>
             </tbody></table>
           {/if}
         </div>
@@ -8124,6 +8205,10 @@
               <tr><td>:tabonly / :tabo</td><td>{t('shortcuts.tab.only')}</td></tr>
               <tr><td>:tabmove [N]</td><td>{t('shortcuts.tab.move')}</td></tr>
               <tr><td>:tabreopen / :tabre</td><td>{t('shortcuts.tab.reopen')}</td></tr>
+              <tr><td>:split / :sp</td><td>{t('shortcuts.tab.split_h')}</td></tr>
+              <tr><td>:vsplit / :vs</td><td>{t('shortcuts.tab.split_v')}</td></tr>
+              <tr><td>:q / :close</td><td>{t('shortcuts.tab.split_close')}</td></tr>
+              <tr><td>:only</td><td>{t('shortcuts.tab.split_only')}</td></tr>
             </tbody></table>
           {:else if commandsTab === 'search'}
             <table><tbody>
@@ -8917,6 +9002,7 @@
   /* 프레젠테이션은 한 페이지가 이미 화면 안에 꽉 차게 맞춰져 있으니(fitPresentationPage)
      스크롤 앵커링용 flex-start 대신 가운데 정렬 + 검은 배경으로 슬라이드처럼 보이게 한다 */
   :global(body.presentation-mode) .main { background: #000; }
+  :global(body.presentation-mode) .main-area > :global(.split-pane) { display: none; }
   :global(body.presentation-mode) .viewer {
     justify-content: center;
     align-items: center;
@@ -9109,8 +9195,16 @@
   }
 
   /* ── Main viewer ── */
+  .main-area { flex: 1; display: flex; min-width: 0; min-height: 0; }
+  .main-area.split-h { flex-direction: column; }
+  .main-area > :global(.split-pane) { border-right: 1px solid var(--sh-6); }
+  .main-area.split-h > :global(.split-pane) { border-right: none; border-bottom: 1px solid var(--sh-6); }
+  /* 분할 중엔 활성 창에만 링 — 비활성 메인 창은 DOM 포커스가 남아 있어도 링을 끈다 */
+  .main.split-inactive:focus { box-shadow: none; }
   .main {
     flex: 1;
+    min-width: 0;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: auto;
     /* 브라우저 자체의 스크롤 앵커링(콘텐츠가 뷰포트 위에 삽입되면 자동으로 scrollTop을

@@ -186,6 +186,19 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `g<Tab>` | Go to the last accessed tab (repeat to toggle) |
 | `:tabmove [N]` | Move tab position |
 
+### Split view
+
+View two places in the same PDF side by side — e.g. keep a figure open while reading the text. The split window scrolls and zooms on its own (`j`/`k`, `J`/`K`, `gg`/`G`, `{n}G`, `Ctrl+D`/`Ctrl+U`, `zi`/`zo`/`zh`/`zv`).
+
+| Key | Action |
+|-----|--------|
+| `:split` / `:sp` | Split top/bottom |
+| `:vsplit` / `:vs` | Split left/right |
+| `Ctrl+W w` | Switch to the other window |
+| `Ctrl+W h`/`j`/`k`/`l` | Move to the window in that direction (like Vim) |
+| `:q` / `:close` / `Ctrl+W c` | Close the current window — the other one stays (the document stays open) |
+| `:only` / `Ctrl+W o` | Close the other window |
+
 ## Development
 
 ```bash
