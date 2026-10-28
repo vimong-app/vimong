@@ -1,6 +1,6 @@
 {
   "name": "vimong",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "A document viewer you drive entirely with Vim keybindings.",
   "type": "module",
   "scripts": {

@@ -3414,6 +3414,7 @@
       mdMode, mdSource, mdSearchResults, mdScale,
       epubReflowable, epubFontSize,
       marks,
+      split: splitInfo(),
     };
   }
 
@@ -3463,10 +3464,12 @@
     ++thumbVersion; // 현재 탭 썸네일 로드 중단
     resetMainViewState();
     saveTab();
+    closeSplit(); // 분할은 탭마다 따로(vim과 같음) — 떠나는 탭의 분할은 saveTab에 담아 두고 닫는다
     await invoke('switch_tab', { idx });
     currentTabIdx = idx;
     loadTab(idx);
     await renderCurrentView();
+    await restoreSplit(tabStates[idx].split);
     if (showFileInfo) await loadDocInfo();
   }
 
@@ -3563,6 +3566,7 @@
     ++thumbVersion;
     resetMainViewState();
     saveTab();
+    closeSplit(); // 새 탭은 항상 분할 없이 시작한다
     const idx = await invoke('new_tab');
     tabStates.push(makeEmptyTabState());
     tabLabels.push('New Tab');
@@ -3618,6 +3622,9 @@
     hintMode = false; pageLinks = []; lineHintMode = false;
     ++thumbVersion;
     resetMainViewState();
+    // 다른 탭을 닫으면 지금 탭의 분할은 그대로 되살리고, 지금 탭을 닫으면 그 탭의 분할도 같이 닫힌다
+    const keepSplit = idx !== currentTabIdx ? splitInfo() : undefined;
+    closeSplit();
     if (tabLabels.length === 1) {
       // 마지막 탭: 문서만 닫기
       rememberClosedTab(filePath);
@@ -3634,6 +3641,7 @@
     currentTabIdx = newIdx;
     loadTab(newIdx);
     await renderCurrentView();
+    await restoreSplit(keepSplit !== undefined ? keepSplit : tabStates[newIdx].split);
   }
 
   // 문서가 하나라도 열렸으면 아직 아무것도 안 연 다른 빈 탭은 정리한다.
@@ -6207,6 +6215,17 @@
     splitDocId++;
     split = dir;
     if (activate) await setSplitActive(true);
+  }
+
+  // 탭 전환용 — 분할 상태를 탭 상태에 담았다가(saveTab) 돌아올 때 다시 연다. 분할 창의 검색 결과와
+  // 배율은 다시 열 때 처음 상태로 돌아간다(문서·방향·페이지·활성 창만 기억).
+  function splitInfo() {
+    return split ? { dir: split, path: splitPath, page: splitPage, active: splitActive } : null;
+  }
+  async function restoreSplit(info) {
+    if (!info) return;
+    await openSplit(info.dir, info.path, info.page, false);
+    if (info.active) await setSplitActive(true);
   }
 
   function closeSplit() {
