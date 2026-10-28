@@ -188,12 +188,13 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 
 ### Split view
 
-View two places in the same PDF side by side — e.g. keep a figure open while reading the text. The split window scrolls and zooms on its own (`j`/`k`, `J`/`K`, `gg`/`G`, `{n}G`, `Ctrl+D`/`Ctrl+U`, `zi`/`zo`/`zh`/`zv`).
+View two places in the same PDF, or two different documents, side by side — e.g. keep a figure open while reading the text, or read a paper next to its supplement. The split window scrolls, zooms and rotates on its own (`j`/`k`, `J`/`K`, `gg`/`G`, `{n}G`, `Ctrl+D`/`Ctrl+U`, `zi`/`zo`/`zh`/`zv`, `r`/`R`), keeps its document when you switch tabs, reloads when the file changes, and comes back with tab session restore. The sidebar table of contents follows the active window: with the split window active it moves that window, and shows its document's contents when it differs from the main one (the other sidebar tabs stay on the main document).
 
 | Key | Action |
 |-----|--------|
-| `:split` / `:sp` | Split top/bottom |
-| `:vsplit` / `:vs` | Split left/right |
+| `:split [path]` / `:sp` | Split top/bottom — opens `path`, or the current document |
+| `:vsplit [path]` / `:vs` | Split left/right — opens `path`, or the current document |
+| `:e [path]` (in the split window) | Change only the split window's document |
 | `Ctrl+W w` | Switch to the other window |
 | `Ctrl+W h`/`j`/`k`/`l` | Move to the window in that direction (like Vim) |
 | `:q` / `:close` / `Ctrl+W c` | Close the current window — the other one stays (the document stays open) |

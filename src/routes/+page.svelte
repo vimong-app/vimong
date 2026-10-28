@@ -3979,6 +3979,9 @@
     } else if (restoreSession) {
       await restoreTabSession();
     }
+    if (savedSplit?.path && (saved || restoreSession) && await invoke('path_exists', { path: savedSplit.path })) {
+      await openSplit(savedSplit.dir, savedSplit.path, savedSplit.page, false);
+    }
 
     // SyncTeX 정방향 검색 — 이 프로세스 자체가 --forward-search로 실행됐다면(콜드 스타트) 여기서
     // 가져온다. 이미 떠 있는 인스턴스로 두 번째 실행이 들어온 경우는 아래 이벤트로 온다.
@@ -4166,7 +4169,11 @@
   });
 
   // 암호 걸린 PDF — 모달을 띄우고 제출/취소될 때까지 openFile()을 멈춰 세운다
-  function askPassword() {
+  // unlock: 암호를 받아 인증하는 함수(틀리면 throw) — 기본은 지금 탭의 대기 문서(unlock_pdf),
+  // 분할 창은 open_split_doc을 넘긴다. 입력창/오류 표시/취소 흐름은 그대로 같이 쓴다.
+  let passwordUnlock = null;
+  function askPassword(unlock = (pw) => invoke('unlock_pdf', { password: pw })) {
+    passwordUnlock = unlock;
     passwordInput = '';
     passwordError = '';
     showPasswordPrompt = true;
@@ -4176,7 +4183,7 @@
   async function submitPassword() {
     if (!passwordInput) return;
     try {
-      const count = await invoke('unlock_pdf', { password: passwordInput });
+      const count = await passwordUnlock(passwordInput);
       showPasswordPrompt = false;
       passwordResolve({ ok: true, count });
     } catch (e) {
@@ -4587,6 +4594,7 @@
     if (mdMode) { selectedTocId = item.id; mdComponentRef?.scrollToOffset(item.mdOffset, item.mdAnchor); return; }
     if (item.page === null) return;
     selectedTocId = item.id;
+    if (tocTarget) { splitRef?.gotoPage(item.page, item.y); return; }
     pushJump();
     await gotoPageAndY(item.page, item.y);
   }
@@ -4755,7 +4763,7 @@
   // 부모들만 편다(자기 자신을 펴면 그 항목의 자식들까지 불필요하게 드러난다)
   function expandAncestors(id) {
     const parts = id.split('-');
-    for (let i = 1; i < parts.length; i++) collapsed.delete(parts.slice(0, i).join('-'));
+    for (let i = 1; i < parts.length; i++) shownCollapsed.delete(parts.slice(0, i).join('-'));
   }
 
   // 현재 페이지의 헤딩이 접힌 상위 항목 밑에 숨어 있어도 toc에서 보이도록 조상을 펼친다 —
@@ -4782,7 +4790,7 @@
     nodes.forEach((n, i) => {
       const id = path ? `${path}-${i}` : `${i}`;
       out.push({ title: n.title, page: n.page, y: n.y, mdOffset: n.mdOffset, mdAnchor: n.mdAnchor, depth, id, hasChildren: n.children.length > 0 });
-      if (n.children.length > 0 && (all || !collapsed.has(id))) flattenToc(n.children, depth + 1, id, out, all);
+      if (n.children.length > 0 && (all || !shownCollapsed.has(id))) flattenToc(n.children, depth + 1, id, out, all);
     });
     return out;
   }
@@ -4804,11 +4812,11 @@
     if (collapsedLayers.has(id)) collapsedLayers.delete(id);
     else collapsedLayers.add(id);
   }
-  let flatToc = $derived(flattenToc(toc, 0, '', []));
+  let flatToc = $derived(flattenToc(shownToc, 0, '', []));
   // 현재 페이지를 "담고 있는" toc 항목 — 정확히 그 페이지를 가리키는 헤딩이 없으면(섹션
   // 내용이 길어 중간 페이지에는 헤딩이 없는 경우) 그 페이지 이전의 가장 가까운 헤딩이 계속
   // 현재 항목으로 하이라이트되게 한다. 전체 트리 기준이라 접힌 항목도 후보에 포함된다.
-  let currentTocItem = $derived(toc.length ? findNearestTocItem(flattenToc(toc, 0, '', [], true), currentPage) : null);
+  let currentTocItem = $derived(shownToc.length ? findNearestTocItem(flattenToc(shownToc, 0, '', [], true), tocPage) : null);
 
   function tocPages(nodes, out) {
     nodes.forEach(n => { if (n.page !== null) out.push(n.page); tocPages(n.children, out); });
@@ -4865,6 +4873,8 @@
   }
 
   function onTocClick(e, item, i) {
+    // 다중 선택·우클릭 메뉴(내보내기, 섹션 검색)는 메인 문서 전용 — 분할 창 문서 목차에선 이동만
+    if (tocFromSplit) { selectedTocIds = new SvelteSet(); gotoTocItem(item); return; }
     if (e.shiftKey && tocSelectAnchor !== null) {
       const a = flatToc.findIndex(it => it.id === tocSelectAnchor);
       if (a !== -1) { selectTocRange(a, i, selectedTocIds); return; }
@@ -4882,6 +4892,7 @@
   // 수식키 없이 누른 채 다른 항목 위로 끌면 시작~현재 항목을 새 선택으로. 시작 항목과 다른 곳에서
   // 떼면 click이 그 항목에 안 떨어지므로(공통 부모로 감) 이동 없이 선택만 남는다.
   function onTocMouseDown(e, i) {
+    if (tocFromSplit) return;
     if (e.button !== 0 || e.shiftKey || e.metaKey || e.ctrlKey) return;
     tocDragAnchor = i;
     window.addEventListener('mouseup', () => { tocDragAnchor = null; }, { once: true });
@@ -4950,6 +4961,7 @@
   // j/k가 안 먹고, OS마다 모양도 달라서. at: 키보드로 열 때 띄울 위치(항목 바로 아래), 생략하면 마우스 위치.
   function onTocContextMenu(e, item, at) {
     e.preventDefault();
+    if (tocFromSplit) return;
     if (mdMode || item.page === null) return; // 마크다운은 페이지 PNG로 내보낼 개념이 없음
     selectedTocId = item.id;
     if (!selectedTocIds.has(item.id)) { selectedTocIds = new SvelteSet([item.id]); tocSelectAnchor = item.id; }
@@ -4996,8 +5008,8 @@
   });
 
   function toggleTocNode(id) {
-    if (collapsed.has(id)) collapsed.delete(id);
-    else collapsed.add(id);
+    if (shownCollapsed.has(id)) shownCollapsed.delete(id);
+    else shownCollapsed.add(id);
   }
 
   // ── Sidebar resize ────────────────────────────────────────────
@@ -5740,16 +5752,16 @@
         e.preventDefault();
         const item = flatToc[idx];
         if (key === 'ArrowRight' || key === 'l') {
-          if (item.hasChildren && collapsed.has(item.id)) {
-            collapsed.delete(item.id);
+          if (item.hasChildren && shownCollapsed.has(item.id)) {
+            shownCollapsed.delete(item.id);
           } else if (item.hasChildren) {
             const nextIdx = Math.min(idx + 1, flatToc.length - 1);
             const nextItem = flatToc[nextIdx];
             focusNearestItem(tocItemEls, nextIdx);
             await gotoTocItem(nextItem);
           }
-        } else if (item.hasChildren && !collapsed.has(item.id)) {
-          collapsed.add(item.id);
+        } else if (item.hasChildren && !shownCollapsed.has(item.id)) {
+          shownCollapsed.add(item.id);
         } else {
           const lastDash = item.id.lastIndexOf('-');
           const parentId = lastDash === -1 ? null : item.id.slice(0, lastDash);
@@ -6066,26 +6078,71 @@
     }
   }
 
-  // ── :split / :vsplit — 같은 문서를 두 번째 창(SplitPane)으로 나란히 본다. 어느 창이 키를 받을지는
-  // DOM 포커스가 아니라 splitActive로 정한다 — :명령이나 모달을 거치면 포커스가 body로 빠져서
-  // DOM 포커스만으로는 활성 창을 잃는다. 탭 전환/다른 파일 열기면 닫는다(render_page는 현재 탭 문서를 그린다).
+  // ── :split / :vsplit — 두 번째 창(SplitPane)에 같은 문서나 다른 문서를 나란히 본다. 분할 창은
+  // Rust 쪽 전용 칸(open_split_doc)에 자기 문서를 따로 열어 두므로 메인 탭을 바꾸거나 다른 파일을
+  // 열어도 그대로 남는다. 어느 창이 키를 받을지는 DOM 포커스가 아니라 splitActive로 정한다 —
+  // :명령이나 모달을 거치면 포커스가 body로 빠져서 DOM 포커스만으로는 활성 창을 잃는다.
   let split = $state(null); // null | 'h'(:split, 위아래) | 'v'(:vsplit, 좌우)
   let splitActive = $state(false);
+  let splitPath = $state('');
   let splitPage = $state(0);
+  let splitDocId = $state(0); // 분할 창 문서를 (다시) 열 때마다 올려서 SplitPane을 새로 마운트
   let splitRef = $state();
   let pendingWin = false; // Ctrl-w 다음 키 대기
 
-  async function openSplit(dir) {
-    if (!filePath || mdMode || hwpMode) { statusMsg = t('status.split_unsupported'); return; }
-    if (!split) splitPage = currentPage; // vim처럼 새 창은 지금 보던 곳에서 시작
+  // 사이드바 목차는 활성 창을 따른다 — 분할 창이 활성이면 목차 이동이 분할 창을 움직이고, 분할 창이
+  // 다른 문서면 그 문서의 목차(splitToc)를 보여준다. 메인 문서의 toc/collapsed(탭별 저장 포함)는
+  // 건드리지 않고 화면에 보일 것만 shownToc/shownCollapsed로 바꿔 끼운다. 다른 사이드바 탭(썸네일·
+  // 검색·메모 등)은 메인 문서 그대로다.
+  let splitToc = $state([]);
+  let splitCollapsed = $state(new SvelteSet());
+  let tocTarget = $derived(!!split && splitActive);              // 목차 이동이 분할 창으로 감
+  let tocFromSplit = $derived(tocTarget && splitPath !== filePath); // 분할 창 문서의 목차를 보여줌
+  let shownToc = $derived(tocFromSplit ? splitToc : toc);
+  let shownCollapsed = $derived(tocFromSplit ? splitCollapsed : collapsed);
+  let tocPage = $derived(tocTarget ? splitPage : currentPage);
+
+  // 앱을 다시 켜거나(탭 세션 복원이 켜져 있을 때) webview가 리마운트돼도 분할 창을 되살린다.
+  // saveTabSession과 같은 이유로 이펙트가 덮어쓰기 전, 스크립트 최상단에서 스냅샷을 뜬다.
+  const SPLIT_SESSION_KEY = 'vimong-split-session';
+  const savedSplit = (() => {
+    try { return JSON.parse(localStorage.getItem(SPLIT_SESSION_KEY)); } catch (_) { return null; }
+  })();
+  $effect(() => {
+    const v = split ? { dir: split, path: splitPath, page: splitPage } : null;
+    try { localStorage.setItem(SPLIT_SESSION_KEY, JSON.stringify(v)); } catch (_) { /* skip */ }
+  });
+
+  // 분할 창은 MuPDF가 여는 형식만 그린다(HWP/마크다운은 메인 창 전용 렌더러라 제외)
+  const splitSupported = (path) => SUPPORTED_EXTENSIONS.includes(path.split('.').pop().toLowerCase());
+
+  // path 생략 = 메인 창 문서. 같은 문서면 vim처럼 지금 보던 곳에서, 다른 문서면 첫 페이지에서 시작.
+  async function openSplit(dir, path = filePath, page = null, activate = true) {
+    if (!path || !splitSupported(path)) { statusMsg = t('status.split_unsupported'); return; }
+    try {
+      const r = await invoke('open_split_doc', { path });
+      if (r.needs_password) {
+        const res = await askPassword(pw => invoke('open_split_doc', { path, password: pw }));
+        if (!res.ok) return;
+      }
+    } catch (e) {
+      statusMsg = String(e);
+      return;
+    }
+    splitToc = await invoke('get_toc', { split: true }).catch(() => []);
+    splitCollapsed = collectParentIds(splitToc, '', new SvelteSet()); // 메인 목차처럼 챕터만 펼친 채 시작
+    splitPage = page ?? (path === filePath ? currentPage : 0);
+    splitPath = path;
+    splitDocId++;
     split = dir;
-    await setSplitActive(true);
+    if (activate) await setSplitActive(true);
   }
 
   function closeSplit() {
     if (!split) return;
     split = null;
     splitActive = false;
+    invoke('close_split_doc');
     mainEl?.focus();
   }
 
@@ -6095,20 +6152,22 @@
   async function closeWindow(current) {
     const closingMain = current ? !splitActive : splitActive;
     const v = closingMain ? splitRef?.view() : null;
+    const path = splitPath;
     closeSplit();
-    if (v) await gotoPageAndY(v.page, v.y);
+    if (!v) return;
+    if (path !== filePath) await openFile(path); // 분할 창이 다른 문서를 보고 있었으면 그 문서로
+    if (path === filePath) await gotoPageAndY(v.page, v.y); // openFile이 실패/취소됐으면 건너뜀
   }
+
+  $effect(() => {
+    if (tocTarget) { splitPage; untrack(ensureTocPageVisible); }
+  });
 
   async function setSplitActive(on) {
     splitActive = on && !!split;
     await tick();
     if (splitActive) splitRef?.focus(); else mainEl?.focus();
   }
-
-  $effect(() => {
-    filePath;
-    untrack(closeSplit);
-  });
 
   function isFocusInSidebar() {
     return !!document.querySelector('.sidebar-content')?.contains(document.activeElement);
@@ -6118,7 +6177,7 @@
   // (아래 switchSidebarView) 둘 다에서 쓴다
   function focusCurrentSidebarItem() {
     if (sidebarView === 'toc') {
-      syncTocFocus(currentPage);
+      syncTocFocus(tocPage);
     } else if (sidebarView === 'thumbs') {
       focusNearestItem(thumbEls, currentPage);
     } else if (sidebarView === 'search' && mdMode) {
@@ -6800,8 +6859,13 @@
       await closeWindow(true); // 분할 중엔 탭이 아니라 지금 창만 닫는다(vim과 같음)
     } else if (split && (cmd === 'only' || cmd === 'on')) {
       await closeWindow(false);
-    } else if (cmd === 'split' || cmd === 'sp' || cmd === 'vsplit' || cmd === 'vs') {
-      await openSplit(cmd.startsWith('v') ? 'v' : 'h');
+    } else if (/^(sp|split|vs|vsplit)( |$)/.test(cmd)) {
+      const arg = cmd.slice(cmd.indexOf(' ') + 1).trim();
+      await openSplit(cmd.startsWith('v') ? 'v' : 'h', cmd.includes(' ') && arg ? parsePathArg(arg) : filePath);
+    } else if (split && splitActive && (cmd === 'e' || cmd.startsWith('e '))) {
+      // 분할 창이 활성이면 :e는 그 창의 문서만 바꾼다(vim과 같음)
+      const path = cmd === 'e' ? await open({ filters: [{ name: 'Documents', extensions: SUPPORTED_EXTENSIONS }] }) : parsePathArg(cmd.slice(2));
+      if (path) await openSplit(split, path);
     } else if (cmd === 'q' || cmd === 'tabclose' || cmd === 'tabc') {
       await closeTab(currentTabIdx);
     } else if (cmd === 'tabnew' || cmd === 'tabe') {
@@ -7280,9 +7344,9 @@
         <button
           class="sidebar-tab-btn"
           class:active={sidebarView === 'toc'}
-          disabled={toc.length === 0}
+          disabled={shownToc.length === 0}
           onclick={() => switchSidebarView('toc')}
-          title={toc.length === 0 ? t('sidebar.toc_none') : t('sidebar.toc')}
+          title={shownToc.length === 0 ? t('sidebar.toc_none') : t('sidebar.toc')}
           tabindex="-1"
         >
           <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
@@ -7343,6 +7407,12 @@
       </div>
 
       <div class="sidebar-content">
+        {#if split && splitActive && splitPath !== filePath}
+          <!-- 분할 창이 다른 문서일 때 — 목차는 분할 창 문서, 나머지 탭은 메인 창 문서라 기준을 밝혀 둔다 -->
+          <div class="sidebar-doc-label" title={sidebarView === 'toc' ? splitPath : filePath}>
+            {t(sidebarView === 'toc' ? 'sidebar.split_doc' : 'sidebar.main_doc', { name: baseName(sidebarView === 'toc' ? splitPath : filePath) })}
+          </div>
+        {/if}
         {#if sidebarView === 'search'}
           <div class="search-panel-header">
             <input
@@ -7490,7 +7560,7 @@
                   tabindex="-1"
                   onclick={(e) => { e.stopPropagation(); toggleTocNode(item.id); }}
                   onkeydown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); toggleTocNode(item.id); } }}
-                >{collapsed.has(item.id) ? '▸' : '▾'}</span>
+                >{shownCollapsed.has(item.id) ? '▸' : '▾'}</span>
               {:else}
                 <span class="toc-caret-spacer"></span>
               {/if}
@@ -7711,8 +7781,9 @@
   <!-- ── Main viewer ── -->
   <div class="main-area" class:split-h={split === 'h'}>
   {#if split}
-    {#key pageVersion}
-      <SplitPane bind:this={splitRef} bind:page={splitPage} rotationOf={getPageRotation} initialScale={scale}
+    {#key splitDocId}
+      <SplitPane bind:this={splitRef} bind:page={splitPage} path={splitPath} showName={splitPath !== filePath}
+                 initialRotations={splitPath === filePath ? pageRotations : {}} initialScale={scale}
                  active={splitActive} onactivate={() => splitActive = true} />
     {/key}
   {/if}
@@ -8219,8 +8290,9 @@
               <tr><td>:tabonly / :tabo</td><td>{t('shortcuts.tab.only')}</td></tr>
               <tr><td>:tabmove [N]</td><td>{t('shortcuts.tab.move')}</td></tr>
               <tr><td>:tabreopen / :tabre</td><td>{t('shortcuts.tab.reopen')}</td></tr>
-              <tr><td>:split / :sp</td><td>{t('shortcuts.tab.split_h')}</td></tr>
-              <tr><td>:vsplit / :vs</td><td>{t('shortcuts.tab.split_v')}</td></tr>
+              <tr><td>:split [{'{path}'}] / :sp</td><td>{t('shortcuts.tab.split_h')}</td></tr>
+              <tr><td>:vsplit [{'{path}'}] / :vs</td><td>{t('shortcuts.tab.split_v')}</td></tr>
+              <tr><td>:e [{'{path}'}]</td><td>{t('shortcuts.tab.split_edit')}</td></tr>
               <tr><td>:q / :close</td><td>{t('shortcuts.tab.split_close')}</td></tr>
               <tr><td>:only</td><td>{t('shortcuts.tab.split_only')}</td></tr>
             </tbody></table>
@@ -9096,6 +9168,14 @@
 
   /* ── TOC ── */
   .sidebar-content:has(.toc-item) { gap: 1px; }
+  .sidebar-doc-label {
+    padding: 2px 6px 4px;
+    font-size: 11px;
+    color: var(--sh-17);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .sidebar-content:has(.thumb-item) { gap: 2px; }
   .toc-item {
     display: flex;

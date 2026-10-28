@@ -372,13 +372,18 @@ unsafe impl Send for PdfDoc {}
 struct AppState {
     tabs: Vec<PdfDoc>,
     current: usize,
+    // :split/:vsplit 창이 보는 문서 — 탭과 별개로 따로 연다(같은 파일이어도 한 번 더 연다).
+    // 그래야 분할 창에서 :e로 다른 파일을 보거나, 메인 탭을 바꿔도 분할 창이 그대로 남는다.
+    split: PdfDoc,
 }
 
 impl AppState {
     fn new() -> Self {
-        AppState { tabs: vec![PdfDoc::empty()], current: 0 }
+        AppState { tabs: vec![PdfDoc::empty()], current: 0, split: PdfDoc::empty() }
     }
     fn tab(&self) -> &PdfDoc { &self.tabs[self.current] }
+    // render_page 등 분할 창과 같이 쓰는 커맨드용 — split이면 분할 창 문서, 아니면 현재 탭
+    fn view(&self, split: Option<bool>) -> &PdfDoc { if split == Some(true) { &self.split } else { self.tab() } }
     fn tab_mut(&mut self) -> &mut PdfDoc { &mut self.tabs[self.current] }
 }
 
@@ -409,6 +414,7 @@ fn reset_tabs(app: tauri::AppHandle, state: State<Mutex<AppState>>) {
     let mut s = state.lock().unwrap();
     s.tabs = vec![PdfDoc::empty()];
     s.current = 0;
+    s.split = PdfDoc::empty();
     drop(s);
     update_tab_menu_enabled(&app, 1);
 }
@@ -594,6 +600,39 @@ async fn open_pdf(app: tauri::AppHandle, path: String) -> Result<OpenResult, Str
         tab.annotation_undo_stack.clear();
         Ok(OpenResult { page_count: count, needs_password: false, is_reflowable })
     }).await.map_err(|e| e.to_string())?
+}
+
+#[derive(serde::Serialize)]
+struct SplitOpenResult {
+    page_count: u32,
+    needs_password: bool,
+}
+
+// 분할 창 문서 열기 — 암호가 필요하면 password 없이 부를 때 needs_password로 알리고, 프론트가
+// 암호를 받아 password와 함께 다시 부른다(틀리면 Err). 탭의 pending/unlock_pdf 같은 중간 상태가
+// 없도록 매번 새로 연다 — 처음 열 때 한두 번뿐이라 비용이 문제되지 않는다.
+#[tauri::command]
+async fn open_split_doc(app: tauri::AppHandle, path: String, password: Option<String>) -> Result<SplitOpenResult, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let path = expand_tilde(&path);
+        let mut doc = Document::open(&path).map_err(|e| e.to_string())?;
+        if doc.needs_password().map_err(|e| e.to_string())? {
+            let Some(pw) = password else { return Ok(SplitOpenResult { page_count: 0, needs_password: true }) };
+            if !doc.authenticate(&pw).map_err(|e| e.to_string())? {
+                return Err("Incorrect password".to_string());
+            }
+        }
+        let count = doc.page_count().map_err(|e| e.to_string())? as u32;
+        let state = app.state::<Mutex<AppState>>();
+        let mut s = state.lock().unwrap();
+        s.split = PdfDoc { doc: Some(doc), path: Some(path), cached_page_count: count, ..PdfDoc::empty() };
+        Ok(SplitOpenResult { page_count: count, needs_password: false })
+    }).await.map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn close_split_doc(state: State<Mutex<AppState>>) {
+    state.lock().unwrap().split = PdfDoc::empty();
 }
 
 // EPUB/HTML 등 재배치 문서의 폰트 크기(em, pt)를 바꿔서 다시 페이지를 나눈다 — zi/zo가
@@ -3752,7 +3791,7 @@ fn unpremultiply_rgba(buf: &mut [u8]) {
 }
 
 #[tauri::command]
-async fn render_page(app: tauri::AppHandle, page_num: u32, scale: f32, rotation: f32) -> Result<tauri::ipc::Response, String> {
+async fn render_page(app: tauri::AppHandle, page_num: u32, scale: f32, rotation: f32, split: Option<bool>) -> Result<tauri::ipc::Response, String> {
     // 페이지 래스터화도 무거운 동기 작업이라 메인 스레드에서 돌리면 그동안 웹뷰가 화면을 못 그림
     let buf = tauri::async_runtime::spawn_blocking(move || {
         // PNG 인코딩이 "페이지 열기 지연"의 실제 원인이었다 — 실측: 래스터화 자체는
@@ -3770,7 +3809,7 @@ async fn render_page(app: tauri::AppHandle, page_num: u32, scale: f32, rotation:
         let mut pixmap = {
             let state = app.state::<Mutex<AppState>>();
             let s = state.lock().unwrap();
-            let doc = s.tab().doc.as_ref().ok_or("No document open")?;
+            let doc = s.view(split).doc.as_ref().ok_or("No document open")?;
             let page = doc.load_page(page_num as i32).map_err(|e| e.to_string())?;
             let mut matrix = Matrix::new_scale(scale, scale);
             matrix.rotate(rotation);
@@ -3979,13 +4018,13 @@ mod content_bbox_tests {
 }
 
 #[tauri::command]
-async fn get_page_content_bbox(app: tauri::AppHandle, page_num: u32, rotation: f32) -> Result<Option<[f32; 4]>, String> {
+async fn get_page_content_bbox(app: tauri::AppHandle, page_num: u32, rotation: f32, split: Option<bool>) -> Result<Option<[f32; 4]>, String> {
     const RES: f32 = 2.0;
     tauri::async_runtime::spawn_blocking(move || {
         let pixmap = {
             let state = app.state::<Mutex<AppState>>();
             let s = state.lock().unwrap();
-            let doc = s.tab().doc.as_ref().ok_or("No document open")?;
+            let doc = s.view(split).doc.as_ref().ok_or("No document open")?;
             let page = doc.load_page(page_num as i32).map_err(|e| e.to_string())?;
             let mut matrix = Matrix::new_scale(RES, RES);
             matrix.rotate(rotation);
@@ -4001,12 +4040,12 @@ async fn get_page_content_bbox(app: tauri::AppHandle, page_num: u32, rotation: f
 // 문서를 열 때(혹은 그 보기 모드로 전환할 때) 페이지마다 get_page_size를 왕복하는 대신
 // 한 번의 Mutex 잠금으로 전체 크기를 몰아서 가져온다.
 #[tauri::command]
-async fn get_all_page_sizes(app: tauri::AppHandle) -> Result<Vec<[f32; 2]>, String> {
+async fn get_all_page_sizes(app: tauri::AppHandle, split: Option<bool>) -> Result<Vec<[f32; 2]>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let state = app.state::<Mutex<AppState>>();
         let s = state.lock().unwrap();
-        let doc = s.tab().doc.as_ref().ok_or("No document open")?;
-        let count = s.tab().cached_page_count;
+        let doc = s.view(split).doc.as_ref().ok_or("No document open")?;
+        let count = s.view(split).cached_page_count;
         (0..count)
             .map(|i| {
                 let page = doc.load_page(i as i32).map_err(|e| e.to_string())?;
@@ -4979,9 +5018,9 @@ fn convert_outline(o: mupdf::Outline) -> TocEntry {
 }
 
 #[tauri::command]
-fn get_toc(state: State<Mutex<AppState>>) -> Result<Vec<TocEntry>, String> {
+fn get_toc(state: State<Mutex<AppState>>, split: Option<bool>) -> Result<Vec<TocEntry>, String> {
     let s = state.lock().unwrap();
-    let doc = s.tab().doc.as_ref().ok_or("No document open")?;
+    let doc = s.view(split).doc.as_ref().ok_or("No document open")?;
     let outlines = doc.outlines().map_err(|e| e.to_string())?;
     Ok(outlines.into_iter().map(convert_outline).collect())
 }
@@ -5768,6 +5807,8 @@ pub fn run() {
             get_page_size,
             get_all_page_sizes,
             get_page_content_bbox,
+            open_split_doc,
+            close_split_doc,
             search_page,
             search_all,
             get_page_links,
