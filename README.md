@@ -86,6 +86,7 @@ Or with **Claude Desktop**, in `~/Library/Application Support/Claude/claude_desk
 | `get_page_image` | Page rendered as an image — figures, equations, scanned pages |
 | `get_notes` | Your highlights (with the highlighted text) and notes |
 | `get_outline` | Table of contents with page numbers |
+| `search_text` | Find a word or phrase and return each match with its page and surrounding text — no need to read the whole document |
 | `goto_page` | Move Vimong to a page |
 | `add_highlight` | Highlight a passage (found by its first and last words), optionally with a comment note — unsaved until `:w`, undo with `u` |
 | `save_pages` | Save pages as a new PDF |

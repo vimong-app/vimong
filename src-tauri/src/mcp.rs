@@ -120,6 +120,18 @@ fn handle(method: &str, params: &Value) -> Result<Value, String> {
                 },
             },
             {
+                "name": "search_text",
+                "description": "Find a word or phrase in the document currently open in Vimong without reading the whole text. Returns each match as its page number and the surrounding text, with the match in **bold**. Matching ignores case, spaces, punctuation and hyphenation and also finds it inside longer words. Plain text only, no regex. For a topic rather than an exact term, search several synonyms or key terms in turn; read a hit's full page with get_page_text. Defaults to all pages.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": { "type": "string", "description": "Word or phrase to find." },
+                        "pages": { "type": "string", "description": "1-based page spec like \"3\" or \"1-3,7\". Defaults to all pages." },
+                    },
+                    "required": ["query"],
+                },
+            },
+            {
                 "name": "get_outline",
                 "description": "Return the table of contents (outline/bookmarks) of the document currently open in Vimong, with 1-based page numbers. Use it to map chapter or section names to page ranges.",
                 "inputSchema": { "type": "object", "properties": {} },
@@ -148,9 +160,9 @@ const MAX_IMAGE_PAGES: usize = 5; // 페이지 이미지는 한 장에 수백 KB
 
 // 결과는 MCP content 배열 — 대부분 텍스트 하나, get_page_image만 이미지 여러 개
 fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
-    const TOOLS: [&str; 10] = [
+    const TOOLS: [&str; 11] = [
         "get_current_view", "save_pages", "save_markdown", "get_page_text", "get_notes", "get_outline",
-        "get_selection", "get_page_image", "goto_page", "add_highlight",
+        "get_selection", "get_page_image", "goto_page", "add_highlight", "search_text",
     ];
     if !TOOLS.contains(&name) {
         return Err(format!("unknown tool: {name}"));
@@ -175,7 +187,7 @@ fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
         "add_highlight" => return add_highlight(args, &view).map(text),
         _ => {}
     }
-    let pages = page_spec(args, &view, name == "get_notes");
+    let pages = page_spec(args, &view, name == "get_notes" || name == "search_text");
     if name == "get_page_image" {
         let path = view["path"].as_str().ok_or("invalid view state")?;
         let page_count = view["page_count"].as_u64().unwrap_or(0) as usize;
@@ -390,6 +402,7 @@ fn call_text_tool(name: &str, args: &Value, view: &Value, pages: &str) -> Result
         }
         "get_notes" => notes(path, &pages, page_count),
         "get_outline" => outline(path),
+        "search_text" => search_text(path, args["query"].as_str().ok_or("query is required")?, &pages, page_count),
         _ => {
             let out = args["output_path"].as_str().ok_or("output_path is required")?;
             let out = super::resolve_out_path(path, out.to_string());
@@ -409,6 +422,53 @@ fn open_doc(path: &str) -> Result<mupdf::Document, String> {
         return Err("Password-protected documents are not supported".to_string());
     }
     Ok(doc)
+}
+
+const MAX_SEARCH_HITS: usize = 50; // 흔한 단어는 매치가 수백 개라 앞쪽만 보여주고 총 개수를 알린다
+const SEARCH_CONTEXT_CHARS: usize = 60; // 매치 앞뒤로 붙일 문맥 길이(원문 글자 수)
+
+// 매칭은 add_highlight와 같은 normalize/find_all — AI가 옮겨 적은 검색어의 대소문자·하이픈·따옴표
+// 차이를 흡수한다. 앱의 / 검색(search_all)은 앱 프로세스 상태에 묶여 있어 여기선 못 쓴다.
+fn search_text(path: &str, query: &str, spec: &str, page_count: usize) -> Result<String, String> {
+    let pat: Vec<char> = normalize(query.chars()).into_iter().map(|(c, _)| c).collect();
+    if pat.is_empty() {
+        return Err("query must contain letters or digits".to_string());
+    }
+    let doc = open_doc(path)?;
+    let mut hits = Vec::new();
+    let mut total = 0;
+    for i in super::parse_page_spec(spec, page_count)? {
+        let pg = doc.load_page(i as i32).map_err(|e| e.to_string())?;
+        let text: Vec<char> = super::extract_chars(&pg)?.into_iter().map(|(c, _)| c).collect();
+        let snippets = page_hits(&text, &pat);
+        total += snippets.len();
+        hits.extend(snippets.into_iter().map(|s| format!("p.{}: {s}", i + 1)));
+    }
+    if total == 0 {
+        return Ok(format!("No matches for \"{query}\"."));
+    }
+    let shown = hits.len().min(MAX_SEARCH_HITS);
+    let mut out = format!("{total} match(es) for \"{query}\"");
+    if total > shown {
+        out += &format!(", showing the first {shown} — narrow pages or use a longer query for the rest");
+    }
+    Ok(out + ":\n" + &hits[..shown].join("\n"))
+}
+
+// 한 페이지의 매치마다 "…앞 문맥 **매치** 뒤 문맥…" 한 줄. 줄바꿈·연속 공백은 공백 하나로.
+fn page_hits(text: &[char], pat: &[char]) -> Vec<String> {
+    let hay = normalize(text.iter().copied());
+    find_all(&hay, pat)
+        .into_iter()
+        .map(|at| {
+            let (a, b) = (hay[at].1, hay[at + pat.len() - 1].1 + 1);
+            let (pre, post) = (a.saturating_sub(SEARCH_CONTEXT_CHARS), (b + SEARCH_CONTEXT_CHARS).min(text.len()));
+            let s = |r: &[char]| r.iter().collect::<String>();
+            let snippet = format!("{}**{}**{}", s(&text[pre..a]), s(&text[a..b]), s(&text[b..post]));
+            let ell = |cut: bool| if cut { "…" } else { "" };
+            format!("{}{}{}", ell(pre > 0), snippet.split_whitespace().collect::<Vec<_>>().join(" "), ell(post < text.len()))
+        })
+        .collect()
 }
 
 // 하이라이트 주석엔 글자 자체가 없고 영역(quad)만 있어서, 페이지 텍스트에서 그 영역 안에 중심이
@@ -551,7 +611,7 @@ mod tests {
     #[test]
     fn lists_tools_and_reports_unknown_method() {
         let tools = handle("tools/list", &Value::Null).unwrap();
-        assert_eq!(tools["tools"].as_array().unwrap().len(), 10);
+        assert_eq!(tools["tools"].as_array().unwrap().len(), 11);
         assert!(handle("nope", &Value::Null).is_err());
         let r = handle("tools/call", &json!({ "name": "nope", "arguments": {} })).unwrap();
         assert_eq!(r["isError"], true);
@@ -567,6 +627,21 @@ mod tests {
         assert_eq!(hay[hits[0]].1, page.chars().position(|c| c == 'a').unwrap()); // 원래 글자 위치로 되짚기
         assert_eq!(find_all(&hay, &pat("efficient")).len(), 1);
         assert!(find_all(&hay, &pat("attention model")).is_empty());
+    }
+
+    #[test]
+    fn search_hits_show_match_in_context() {
+        let text: Vec<char> = "We apply Drop-\nout here. Later, dropout\n  again.".chars().collect();
+        let pat: Vec<char> = "dropout".chars().collect();
+        assert_eq!(page_hits(&text, &pat), vec!["We apply **Drop- out** here. Later, dropout again.", "We apply Drop- out here. Later, **dropout** again."]);
+        assert!(page_hits(&text, &"missing".chars().collect::<Vec<_>>()).is_empty());
+        let long: Vec<char> = format!("{}dropout{}", "a".repeat(100), "b".repeat(100)).chars().collect();
+        let hit = &page_hits(&long, &pat)[0];
+        assert!(hit.starts_with('…') && hit.ends_with('…') && hit.contains("a**dropout**b"));
+        let pdf = concat!(env!("CARGO_MANIFEST_DIR"), "/../testdata/synctex-demo.pdf");
+        let out = search_text(pdf, "line 8", "1", 1).unwrap();
+        assert!(out.starts_with("1 match(es)") && out.contains("p.1: ") && out.contains("**line 8**"), "{out}");
+        assert!(search_text(pdf, "nowhere-to-be-found", "1", 1).unwrap().starts_with("No matches"));
     }
 
     #[test]

@@ -85,6 +85,7 @@ claude mcp add -s user vimong -- /Applications/Vimong.app/Contents/MacOS/vimong 
 | `get_page_image` | 페이지를 이미지로 — 그림, 수식, 스캔 페이지 |
 | `get_notes` | 하이라이트(하이라이트한 문장 포함)와 메모 |
 | `get_outline` | 목차와 페이지 번호 |
+| `search_text` | 단어·구절을 찾아 매치마다 페이지와 앞뒤 문맥을 돌려줌 — 문서 전체를 읽지 않아도 됨 |
 | `goto_page` | Vimong 화면을 해당 페이지로 이동 |
 | `add_highlight` | 시작·끝 구절로 찾은 문장을 하이라이트하고, 코멘트가 있으면 메모로 붙임 — `:w` 전까지 미저장, `u`로 취소 |
 | `save_pages` | 페이지를 새 PDF로 저장 |
