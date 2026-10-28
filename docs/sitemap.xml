@@ -92,6 +92,16 @@
     <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/zoom.html" />
   </url>
   <url>
+    <loc>https://vimong.app/ko/features/split-view.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/split-view.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/split-view.html" />
+  </url>
+  <url>
+    <loc>https://vimong.app/en/features/split-view.html</loc>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/split-view.html" />
+    <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/split-view.html" />
+  </url>
+  <url>
     <loc>https://vimong.app/ko/features/synctex.html</loc>
     <xhtml:link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/synctex.html" />
     <xhtml:link rel="alternate" hreflang="en" href="https://vimong.app/en/features/synctex.html" />

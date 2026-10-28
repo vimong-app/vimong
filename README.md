@@ -33,11 +33,12 @@ conventions Vim users already know.
 - **Link hints** — press `f` to label every link on the page, then type a letter to jump
 - **Export pages** — export pages as PNG, JPG, or PDF; merge multiple pages into one file; password-protect PDF exports
 - **Font usage breakdown** — see which fonts are used in the document and in what proportion
-- **Fast zoom** — switch instantly between zoom levels, actual size, and fit-to-width/height
+- **Fast zoom** — switch instantly between zoom levels, actual size, fit-to-width/height, and fit to the content with the margins trimmed (`zc`)
 - **Page rotation** — rotate pages 90° at a time with `r`/`R` (works for both PDF and HWP)
 - **SyncTeX support** — jump forward and backward between your LaTeX source and the PDF
 - **HWP support** — open Korean HWP documents right alongside your PDFs
 - **Tabs** — `Cmd+T` for a new tab, `gt`/`gT` to switch, `:tabonly`/`:tabmove` and other vim tab commands
+- **Split view** — `:vsplit`/`:split` to view two places in a PDF, or two different documents, side by side; each window scrolls, zooms and searches on its own
 - **Presentation mode** — `p` to enter a fullscreen slideshow
 - **AI integration (MCP)** — let Claude and other AI assistants see the page you're on, read your highlights, and jump pages for you
 

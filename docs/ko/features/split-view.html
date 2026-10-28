@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>분할 보기 — Vimong</title>
+  <meta name="description" content=":vsplit / :split으로 PDF의 두 위치나 서로 다른 두 문서를 나란히 봅니다. 창마다 따로 스크롤·확대·검색합니다.">
+  <link rel="canonical" href="https://vimong.app/ko/features/split-view.html">
+  <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/split-view.html">
+  <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/split-view.html">
+  <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/split-view.html">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="분할 보기 — Vimong">
+  <meta property="og:description" content=":vsplit / :split으로 PDF의 두 위치나 서로 다른 두 문서를 나란히 봅니다. 창마다 따로 스크롤·확대·검색합니다.">
+  <meta property="og:image" content="https://vimong.app/assets/icon.png">
+  <meta property="og:url" content="https://vimong.app/ko/features/split-view.html">
+  <link rel="icon" href="../../assets/favicon.png?v=7">
+  <link rel="stylesheet" href="../../css/style.css">
+</head>
+<body class="min-h-screen bg-neutral-950 text-neutral-200 antialiased">
+  <header class="sticky top-0 z-10 border-b border-white/10 bg-neutral-950">
+    <div class="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
+      <a href="../index.html" class="flex items-center gap-2 font-mono text-lg font-semibold text-white">
+        <img src="../../assets/icon.png" alt="Vimong" class="h-7 w-7 rounded-md">
+        Vimong
+      </a>
+      <nav class="flex items-center gap-6 text-sm text-neutral-300">
+        <a href="../index.html" class="hover:text-white">홈</a>
+        <a href="../key-mapping.html" class="hover:text-white">키 매핑</a>
+        <span class="flex items-center gap-3 border-l border-white/10 pl-6">
+          <a href="split-view.html" class="text-white">KO</a>
+          <a href="../../en/features/split-view.html" class="text-neutral-500 hover:text-white">EN</a>
+        </span>
+      </nav>
+    </div>
+  </header>
+
+  <main class="mx-auto max-w-3xl px-6 py-16">
+    <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
+    <h1 class="mt-4 text-3xl font-bold text-white">분할 보기</h1>
+    <p class="mt-3 flex items-center gap-3 text-sm text-neutral-500"><span>지원 형식:</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/pdf.svg" alt="" width="32" height="32">PDF</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/epub.svg" alt="" width="32" height="32">EPUB</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/document.svg" alt="" width="32" height="32">XPS</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/img.svg" alt="" width="32" height="32">이미지</span><span>등 (HWP·마크다운 제외)</span></p>
+    <p class="mt-3 text-neutral-400">본문을 읽으면서 그림이나 참고문헌을 옆에 띄워 두거나, 논문과 부록을 나란히 놓고 봅니다. Vim처럼 <span class="kbd">:vsplit</span>과 <span class="kbd">:split</span>으로 화면을 두 창으로 나누고, <span class="kbd">Ctrl</span>+<span class="kbd">W</span>로 창 사이를 오갑니다.</p>
+
+    <table class="mt-6 w-full border-collapse text-sm">
+      <tbody class="divide-y divide-white/10">
+        <tr><td class="py-3 pr-4"><span class="kbd">:split [path]</span> / <span class="kbd">:sp</span></td><td class="py-3 text-neutral-400">위아래로 나누기 — <span class="kbd">path</span> 파일, 없으면 지금 문서</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">:vsplit [path]</span> / <span class="kbd">:vs</span></td><td class="py-3 text-neutral-400">좌우로 나누기 — <span class="kbd">path</span> 파일, 없으면 지금 문서</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">:e [path]</span></td><td class="py-3 text-neutral-400">분할 창에서: 그 창의 문서만 바꾸기</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">Ctrl</span>+<span class="kbd">W</span> <span class="kbd">w</span></td><td class="py-3 text-neutral-400">다른 창으로 전환</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">Ctrl</span>+<span class="kbd">W</span> <span class="kbd">h</span> / <span class="kbd">j</span> / <span class="kbd">k</span> / <span class="kbd">l</span></td><td class="py-3 text-neutral-400">그 방향에 있는 창으로 이동</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">:q</span> / <span class="kbd">:close</span> / <span class="kbd">Ctrl</span>+<span class="kbd">W</span> <span class="kbd">c</span></td><td class="py-3 text-neutral-400">지금 창 닫기 — 다른 창은 남음 (문서는 닫히지 않음)</td></tr>
+        <tr><td class="py-3 pr-4"><span class="kbd">:only</span> / <span class="kbd">Ctrl</span>+<span class="kbd">W</span> <span class="kbd">o</span></td><td class="py-3 text-neutral-400">다른 창 닫기</td></tr>
+      </tbody>
+    </table>
+
+    <h2 class="mt-12 text-lg font-semibold text-white">창마다 따로</h2>
+    <p class="mt-3 text-neutral-400">분할 창은 위치·배율·회전을 따로 가집니다. <span class="kbd">j</span>/<span class="kbd">k</span>, <span class="kbd">J</span>/<span class="kbd">K</span>, <span class="kbd">gg</span>/<span class="kbd">G</span>, <span class="kbd">{n}G</span>, <span class="kbd">Ctrl</span>+<span class="kbd">D</span>/<span class="kbd">U</span>, <span class="kbd">zi</span>/<span class="kbd">zo</span>/<span class="kbd">zh</span>/<span class="kbd">zv</span>/<span class="kbd">zc</span>, <span class="kbd">r</span>/<span class="kbd">R</span>가 모두 활성 창에서 동작합니다. 탭을 바꿔도 자기 문서를 유지하고, 파일이 디스크에서 바뀌면 다시 읽으며(LaTeX 작업에 편리), 탭 세션 복원 때 함께 되살아납니다.</p>
+
+    <h2 class="mt-12 text-lg font-semibold text-white">사이드바와 검색은 활성 창을 따라갑니다</h2>
+    <p class="mt-3 text-neutral-400">사이드바 목차는 활성 창의 것입니다 — 제목을 고르면 그 창이 이동하고, 분할 창이 다른 문서면 그 문서의 목차가 보입니다. 검색도 창마다 따로입니다 — <span class="kbd">/</span>, <span class="kbd">n</span>/<span class="kbd">N</span>, 검색 패널이 활성 창 기준으로 동작하고, 한 창에서 검색해도 다른 창의 결과는 그대로 남습니다. 나머지 사이드바 탭은 메인 창 문서 기준입니다.</p>
+
+    <p class="mt-8 text-neutral-400">분할 창은 MuPDF가 여는 형식(PDF, EPUB, XPS, 이미지 등)에서 동작합니다. HWP와 마크다운 파일은 메인 창에서만 열립니다.</p>
+  </main>
+
+  <footer class="border-t border-white/10 py-8 text-center text-sm text-neutral-500">
+    <p>© 2026 Textment</p>
+  </footer>
+</body>
+</html>
