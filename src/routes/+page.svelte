@@ -876,7 +876,7 @@
     return hits;
   }
 
-  async function runHwpSearch(rawQuery) {
+  async function runHwpSearch(rawQuery, jump = true) {
     const { query, caseSensitive: cs, regex } = parseSearchFlags(rawQuery, caseSensitive);
     caseSensitive = cs; // \c / \C 오버라이드를 Aa 아이콘에도 반영
     regexMode = regex;  // \r / \R 오버라이드를 .* 아이콘에도 반영
@@ -906,6 +906,7 @@
         sidebarView = 'search';
         const totalHits = results.reduce((s, r) => s + r.hit_count, 0);
         statusMsg = `/${rawQuery}  [${totalHits} hit${totalHits > 1 ? 's' : ''} on ${results.length} page${results.length > 1 ? 's' : ''}]`;
+        if (!jump) return;
         await gotoPage(results[0].page);
         await tick();
         focusNearestItem(searchResultEls, 0);
@@ -966,7 +967,7 @@
     mdComponentRef?.scrollToOffset(hit.start, nearestMdHeadingAnchor(hit.start));
   }
 
-  async function runMdSearch(rawQuery) {
+  async function runMdSearch(rawQuery, jump = true) {
     const { query, caseSensitive: cs, regex } = parseSearchFlags(rawQuery, caseSensitive);
     caseSensitive = cs; // \c / \C 오버라이드를 Aa 아이콘에도 반영
     regexMode = regex;  // \r / \R 오버라이드를 .* 아이콘에도 반영
@@ -976,6 +977,7 @@
         searchResultIdx = 0;
         sidebarView = 'search';
         statusMsg = `/${rawQuery}  [${mdSearchResults.length} hit${mdSearchResults.length > 1 ? 's' : ''}]`;
+        if (!jump) return;
         jumpToMdSearchHit(0);
         await tick();
         focusNearestItem(searchResultEls, 0);
@@ -5392,6 +5394,9 @@
       } else if (mdMode && mdSearchResults.length > 0) {
         mdSearchResults = [];
         if (sidebarView === 'search') sidebarView = toc.length > 0 ? 'toc' : 'search';
+      } else if (tocTarget && splitSearchResults.length > 0) {
+        splitSearchResults = []; // 분할 창이 활성이면 그 창의 검색 결과만 지운다
+        splitLastSearch = '';
       } else if (allSearchResults.length > 0) {
         allSearchResults = [];
         pageHighlights = [];
@@ -5665,7 +5670,7 @@
           await gotoPage(nextIdx);
           return;
         }
-      } else if (sidebarView === 'search' && mdMode) {
+      } else if (sidebarView === 'search' && searchListMd) {
         const idx = searchResultEls.indexOf(document.activeElement);
         if (idx !== -1) {
           e.preventDefault(); numBuf = '';
@@ -5679,11 +5684,9 @@
         const idx = searchResultEls.indexOf(document.activeElement);
         if (idx !== -1) {
           e.preventDefault(); numBuf = '';
-          const nextIdx = down ? Math.min(idx + n, allSearchResults.length - 1) : Math.max(idx - n, 0);
+          const nextIdx = down ? Math.min(idx + n, shownSearchResults.length - 1) : Math.max(idx - n, 0);
           focusNearestItem(searchResultEls, nextIdx);
-          const page = allSearchResults[nextIdx].page;
-          searchResultIdx = flatSearchMatches().findIndex(m => m.page === page);
-          await gotoPage(page);
+          await gotoSearchResultPage(shownSearchResults[nextIdx].page);
           return;
         }
       } else if (sidebarView === 'notes') {
@@ -6038,10 +6041,10 @@
       else { mode = 'command'; cmdInput = ''; cmdCompletion = null; }
     } else if (key === '/' || key === '?') {
       await focusSearchTab(key === '?');
-    } else if (key === 'n' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(searchBackward ? -count : count);
-    } else if (key === 'N' && (mdMode ? mdSearchResults.length > 0 : allSearchResults.length > 0)) {
-      await gotoSearchMatch(searchBackward ? count : -count);
+    } else if (key === 'n' && (searchListMd ? mdSearchResults.length > 0 : shownSearchResults.length > 0)) { // 활성 창의 결과 기준
+      await gotoSearchMatch(activeBackward() ? -count : count);
+    } else if (key === 'N' && (searchListMd ? mdSearchResults.length > 0 : shownSearchResults.length > 0)) { // 활성 창의 결과 기준
+      await gotoSearchMatch(activeBackward() ? count : -count);
     } else if (key === '*' || key === '#') {
       await starSearch(key === '*' ? 1 : -1, true, count);
     } else if (key === 's') {
@@ -6102,6 +6105,71 @@
   let shownCollapsed = $derived(tocFromSplit ? splitCollapsed : collapsed);
   let tocPage = $derived(tocTarget ? splitPage : currentPage);
 
+  // 검색은 창마다 따로 — 검색어·방향·결과·지금 보는 매치를 각 창이 갖고, 검색하면 활성 창만 검색한다
+  // (한 창에서 검색해도 다른 창의 결과는 그대로 남는다). 대소문자/정규식 토글만 공유한다. 사이드바 검색
+  // 패널은 목차처럼 활성 창의 것을 보여준다(splitSearchResults는 allSearchResults와 같은 { page, hit_count, rects }[]).
+  let splitSearchResults = $state([]);
+  let splitSearchIdx = $state(-1);
+  let splitLastSearch = $state('');
+  let splitBackward = $state(false); // 분할 창의 마지막 검색 방향 — 메인의 searchBackward와 같은 역할
+  const activeLastSearch = () => (tocTarget ? splitLastSearch : lastSearch);
+  const activeBackward = () => (tocTarget ? splitBackward : searchBackward);
+  let shownSearchResults = $derived(tocTarget ? splitSearchResults : allSearchResults);
+  let searchListMd = $derived(mdMode && !tocTarget); // 검색 패널이 마크다운 결과 목록을 보여주는지
+  const flatSplitMatches = () => splitSearchResults.flatMap(r => r.rects.map(rect => ({ page: r.page, rect })));
+  let splitActiveMatch = $derived(flatSplitMatches()[splitSearchIdx] ?? null);
+
+  async function refreshSplitSearch(query) {
+    try {
+      const resp = await invoke('search_all', { query, caseSensitive, split: true });
+      splitSearchResults = resp.results;
+      caseSensitive = resp.case_sensitive; // \c / \C, \r / \R 오버라이드를 Aa/.* 아이콘에도 반영(메인 검색과 같게)
+      regexMode = resp.regex;
+      searchError = '';
+    } catch (e) {
+      splitSearchResults = [];
+      searchError = String(e);
+      statusMsg = `Search error: ${e}`;
+    }
+    splitSearchIdx = -1;
+  }
+
+  // 분할 창에서 n/N — 메인 gotoSearchMatch와 같은 순환, 매치가 화면 위쪽에 오게 이동
+  function gotoSplitMatch(dir) {
+    const flat = flatSplitMatches();
+    if (flat.length === 0) { statusMsg = `Pattern not found: ${splitLastSearch}`; return; }
+    hlsearchOn = true;
+    splitSearchIdx = (((splitSearchIdx + dir) % flat.length) + flat.length) % flat.length;
+    const m = flat[splitSearchIdx];
+    splitRef?.gotoPage(m.page, Math.max(0, m.rect[1] - 80 / (splitRef?.getScale() ?? 1)));
+  }
+
+  // / Enter 직후 분할 창 첫 이동 — 메인처럼 문서 맨 앞이 아니라 지금 보는 위치 다음(? 이면 이전) 결과부터
+  function gotoSplitFirstMatch() {
+    const flat = flatSplitMatches();
+    const total = flat.length;
+    if (total === 0) { statusMsg = `Pattern not found: ${splitLastSearch}`; return; }
+    const v = splitRef?.view() ?? { page: 0, y: 0 };
+    const at = splitBackward ? matchBefore(flat, v.page, v.y, Infinity) : matchAfter(flat, v.page, v.y, -Infinity);
+    const first = at !== -1 ? at : (splitBackward ? total - 1 : 0);
+    splitSearchIdx = first - (splitBackward ? -1 : 1);
+    gotoSplitMatch(splitBackward ? -1 : 1);
+    statusMsg = `${splitBackward ? '?' : '/'}${splitLastSearch}  [${total} hit${total > 1 ? 's' : ''} on ${splitSearchResults.length} page${splitSearchResults.length > 1 ? 's' : ''}]`
+      + (at === -1 ? '  ' + t(splitBackward ? 'status.search_wrapped_top' : 'status.search_wrapped') : '');
+  }
+
+  // 사이드바 검색 결과 항목 → 활성 창을 그 페이지(첫 매치)로
+  async function gotoSearchResultPage(page) {
+    if (tocTarget) {
+      splitSearchIdx = flatSplitMatches().findIndex(m => m.page === page);
+      splitSearchIdx--;
+      gotoSplitMatch(1);
+      return;
+    }
+    searchResultIdx = flatSearchMatches().findIndex(m => m.page === page);
+    await gotoPage(page);
+  }
+
   // 앱을 다시 켜거나(탭 세션 복원이 켜져 있을 때) webview가 리마운트돼도 분할 창을 되살린다.
   // saveTabSession과 같은 이유로 이펙트가 덮어쓰기 전, 스크립트 최상단에서 스냅샷을 뜬다.
   const SPLIT_SESSION_KEY = 'vimong-split-session';
@@ -6130,6 +6198,9 @@
       return;
     }
     splitToc = await invoke('get_toc', { split: true }).catch(() => []);
+    splitSearchResults = []; // 새 문서 — 이전 문서의 검색 결과/검색어는 버린다
+    splitSearchIdx = -1;
+    splitLastSearch = '';
     splitCollapsed = collectParentIds(splitToc, '', new SvelteSet()); // 메인 목차처럼 챕터만 펼친 채 시작
     splitPage = page ?? (path === filePath ? currentPage : 0);
     splitPath = path;
@@ -6163,6 +6234,12 @@
     if (tocTarget) { splitPage; untrack(ensureTocPageVisible); }
   });
 
+  // 창을 바꾸면 검색 입력창도 그 창의 검색어를 보여준다(입력 중일 땐 건드리지 않음)
+  $effect(() => {
+    tocTarget;
+    untrack(() => { if (split && mode !== 'search') searchQuery = activeLastSearch(); });
+  });
+
   async function setSplitActive(on) {
     splitActive = on && !!split;
     await tick();
@@ -6180,10 +6257,10 @@
       syncTocFocus(tocPage);
     } else if (sidebarView === 'thumbs') {
       focusNearestItem(thumbEls, currentPage);
-    } else if (sidebarView === 'search' && mdMode) {
+    } else if (sidebarView === 'search' && searchListMd) {
       focusNearestItem(searchResultEls, searchResultIdx);
     } else if (sidebarView === 'search') {
-      const idx = allSearchResults.findIndex(r => r.page === currentPage);
+      const idx = shownSearchResults.findIndex(r => r.page === tocPage);
       focusNearestItem(searchResultEls, idx !== -1 ? idx : 0);
     } else if (sidebarView === 'notes') {
       const idx = allNotes.findIndex(n => n.page === currentPage);
@@ -6286,7 +6363,7 @@
     // 파워포인트 슬라이드 쇼도 발표 중엔 편집/검색 같은 조작을 안 주는 것과 같은 맥락으로
     // 프레젠테이션 중엔 검색 자체를 그냥 막는다(모드 전환으로 흐름을 끊지 않음).
     if (presentationMode) { statusMsg = t('status.presentation_unsupported_feature'); return; }
-    searchBackward = backward;
+    if (split && splitActive) splitBackward = backward; else searchBackward = backward;
     // Ctrl-R Ctrl-W가 넣을 단어는 /를 누른 "지금" 잡아 둔다 — 아래에서 사이드바가 열리면 연속 보기는 폭 맞춤으로
     // 배율이 바뀌어 내용이 밀리고, 그러면 커서가 화면 밖으로 나가 cursorTarget()이 빈 값을 줬다
     searchStartWord = cursorTarget().text;
@@ -6294,6 +6371,8 @@
     sidebarVisible = true;
     sidebarView = 'search';
     mode = 'search';
+    // 분할 중엔 입력창에 활성 창의 이전 검색어를 채운다 — 창마다 검색어가 따로라 다른 창 것이 남아 있을 수 있다
+    if (split) { searchQuery = activeLastSearch(); await tick(); }
     if (searchInputEl) {
       // 이전 검색어는 전체 선택한 채로 연다(브라우저 찾기처럼) — 바로 치거나 Ctrl-R Ctrl-W를 누르면 대체되고,
       // Enter면 그대로 다시 검색, → 로 선택을 풀면 이어서 고칠 수 있다. 예전엔 커서가 끝에 있어 이어 붙었다
@@ -6430,6 +6509,7 @@
   }
 
   async function gotoSearchMatch(dir) {
+    if (split && splitActive) { gotoSplitMatch(dir); return; }
     if (mdMode) {
       if (mdSearchResults.length === 0) return;
       hlsearchOn = true;
@@ -7025,13 +7105,23 @@
     }
   }
 
-  // jump=false면 결과만 채우고 화면/포커스는 안 옮긴다 — * / #가 커서 기준으로 직접 이동하려고 쓴다
+  // jump=false면 결과만 채우고 화면/포커스는 안 옮긴다 — * / #가 커서 기준으로 직접 이동하려고 쓴다.
+  // 분할 창이 활성이면 그 창만 검색한다 — 메인 창의 검색어/결과는 그대로 둔다.
   async function runSearch(query, jump = true) {
+    if (!(split && splitActive)) { await runMainSearch(query, jump); return; }
+    hlsearchOn = true;
+    splitLastSearch = query;
+    sidebarView = 'search';
+    await refreshSplitSearch(query);
+    if (jump && !searchError) gotoSplitFirstMatch();
+  }
+
+  async function runMainSearch(query, jump) {
     hlsearchOn = true;
     lastSearch = query;
     searchError = '';
-    if (hwpMode) { await runHwpSearch(query); return; } // \c/\C/\r/\R, vim magic 정규식(\zs\ze 포함) 지원 — runHwpSearch 참고
-    if (mdMode) { await runMdSearch(query); return; }
+    if (hwpMode) { await runHwpSearch(query, jump); return; } // \c/\C/\r/\R, vim magic 정규식(\zs\ze 포함) 지원 — runHwpSearch 참고
+    if (mdMode) { await runMdSearch(query, jump); return; }
     try {
       const resp = await invoke('search_all', { query, caseSensitive });
       const { case_sensitive, regex } = resp;
@@ -7409,8 +7499,9 @@
       <div class="sidebar-content">
         {#if split && splitActive && splitPath !== filePath}
           <!-- 분할 창이 다른 문서일 때 — 목차는 분할 창 문서, 나머지 탭은 메인 창 문서라 기준을 밝혀 둔다 -->
-          <div class="sidebar-doc-label" title={sidebarView === 'toc' ? splitPath : filePath}>
-            {t(sidebarView === 'toc' ? 'sidebar.split_doc' : 'sidebar.main_doc', { name: baseName(sidebarView === 'toc' ? splitPath : filePath) })}
+          {@const followsSplit = sidebarView === 'toc' || sidebarView === 'search'}
+          <div class="sidebar-doc-label" title={followsSplit ? splitPath : filePath}>
+            {t(followsSplit ? 'sidebar.split_doc' : 'sidebar.main_doc', { name: baseName(followsSplit ? splitPath : filePath) })}
           </div>
         {/if}
         {#if sidebarView === 'search'}
@@ -7430,19 +7521,19 @@
             <button
               class="case-toggle"
               class:active={caseSensitive}
-              onclick={() => { caseSensitive = !caseSensitive; if (lastSearch) runSearch(searchQuery || lastSearch); }}
+              onclick={() => { caseSensitive = !caseSensitive; if (activeLastSearch()) runSearch(searchQuery || activeLastSearch()); }}
               title={t('search.case_title')}
               tabindex="-1"
             >Aa</button>
             <button
               class="case-toggle"
               class:active={regexMode}
-              onclick={() => { regexMode = !regexMode; if (lastSearch) runSearch(searchQuery || lastSearch); }}
+              onclick={() => { regexMode = !regexMode; if (activeLastSearch()) runSearch(searchQuery || activeLastSearch()); }}
               title={t('search.regex_title')}
               tabindex="-1"
             >.*</button>
-            {#if lastSearch}
-              <button onclick={() => { allSearchResults = []; mdSearchResults = []; pageHighlights = []; lastSearch = ''; searchQuery = ''; searchError = ''; searchInputEl?.focus(); }} title={t('search.clear')}>✕</button>
+            {#if activeLastSearch()}
+              <button onclick={() => { if (tocTarget) { splitSearchResults = []; splitLastSearch = ''; } else { allSearchResults = []; mdSearchResults = []; pageHighlights = []; lastSearch = ''; } searchQuery = ''; searchError = ''; searchInputEl?.focus(); }} title={t('search.clear')}>✕</button>
             {/if}
           </div>
           {#if searchScope}
@@ -7453,10 +7544,10 @@
           {/if}
           {#if searchError}
             <div class="search-empty-hint">{t('search.error_prefix', { msg: searchError })}</div>
-          {:else if lastSearch && (mdMode ? mdSearchResults.length === 0 : allSearchResults.length === 0)}
-            <div class="search-empty-hint">{t('search.no_results', { q: lastSearch })}</div>
+          {:else if activeLastSearch() && (searchListMd ? mdSearchResults.length === 0 : shownSearchResults.length === 0)}
+            <div class="search-empty-hint">{t('search.no_results', { q: activeLastSearch() })}</div>
           {/if}
-          {#if mdMode}
+          {#if searchListMd}
             {#each mdSearchResults as hit, i}
               {@const ctx = mdHitContext(hit)}
               <div
@@ -7472,15 +7563,15 @@
               </div>
             {/each}
           {:else}
-            {#each allSearchResults as result, i}
+            {#each shownSearchResults as result, i}
               <div
                 class="search-result-item"
-                class:active={result.page === currentPage}
+                class:active={result.page === tocPage}
                 bind:this={searchResultEls[i]}
                 role="button"
                 tabindex="-1"
-                onclick={() => { searchResultIdx = flatSearchMatches().findIndex(m => m.page === result.page); gotoPage(result.page); }}
-                onkeydown={(e) => e.key === 'Enter' && (searchResultIdx = flatSearchMatches().findIndex(m => m.page === result.page), gotoPage(result.page))}
+                onclick={() => gotoSearchResultPage(result.page)}
+                onkeydown={(e) => e.key === 'Enter' && gotoSearchResultPage(result.page)}
               >
                 <span class="result-page">p. {result.page + 1}</span>
                 <span class="result-count">{t('search.hits', { n: result.hit_count })}</span>
@@ -7783,6 +7874,7 @@
   {#if split}
     {#key splitDocId}
       <SplitPane bind:this={splitRef} bind:page={splitPage} path={splitPath} showName={splitPath !== filePath}
+                 searchHits={hlsearchOn ? splitSearchResults : []} activeMatch={hlsearchOn ? splitActiveMatch : null}
                  initialRotations={splitPath === filePath ? pageRotations : {}} initialScale={scale}
                  active={splitActive} onactivate={() => splitActive = true} />
     {/key}

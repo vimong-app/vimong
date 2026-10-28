@@ -188,7 +188,7 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 
 ### Split view
 
-View two places in the same PDF, or two different documents, side by side — e.g. keep a figure open while reading the text, or read a paper next to its supplement. The split window scrolls, zooms and rotates on its own (`j`/`k`, `J`/`K`, `gg`/`G`, `{n}G`, `Ctrl+D`/`Ctrl+U`, `zi`/`zo`/`zh`/`zv`, `r`/`R`), keeps its document when you switch tabs, reloads when the file changes, and comes back with tab session restore. The sidebar table of contents follows the active window: with the split window active it moves that window, and shows its document's contents when it differs from the main one (the other sidebar tabs stay on the main document).
+View two places in the same PDF, or two different documents, side by side — e.g. keep a figure open while reading the text, or read a paper next to its supplement. The split window scrolls, zooms and rotates on its own (`j`/`k`, `J`/`K`, `gg`/`G`, `{n}G`, `Ctrl+D`/`Ctrl+U`, `zi`/`zo`/`zh`/`zv`, `r`/`R`), keeps its document when you switch tabs, reloads when the file changes, and comes back with tab session restore. The sidebar table of contents follows the active window: with the split window active it moves that window, and shows its document's contents when it differs from the main one (the other sidebar tabs stay on the main document). Each window keeps its own search — `/`, `n`/`N`, `Esc` and the search panel act on the active window, and searching in one window leaves the other window's results alone.
 
 | Key | Action |
 |-----|--------|

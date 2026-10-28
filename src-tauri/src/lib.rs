@@ -4894,9 +4894,9 @@ struct SearchResponse {
 }
 
 #[tauri::command]
-fn search_all(query: String, case_sensitive: bool, state: State<Mutex<AppState>>) -> Result<SearchResponse, String> {
+fn search_all(query: String, case_sensitive: bool, split: Option<bool>, state: State<Mutex<AppState>>) -> Result<SearchResponse, String> {
     let s = state.lock().unwrap();
-    let doc = s.tab().doc.as_ref().ok_or("No document open")?;
+    let doc = s.view(split).doc.as_ref().ok_or("No document open")?;
     let count = doc.page_count().map_err(|e| e.to_string())?;
     let (query, case_sensitive, regex) = parse_search_flags(&query, case_sensitive);
     if query.is_empty() { return Ok(SearchResponse { results: vec![], case_sensitive, regex }); }

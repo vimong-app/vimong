@@ -9,7 +9,8 @@
   import { onMount, onDestroy, tick } from 'svelte';
   import { invoke } from '@tauri-apps/api/core';
 
-  let { path, showName = false, initialRotations = {}, initialScale = 1, active = false, onactivate, page = $bindable(0) } = $props();
+  let { path, showName = false, initialRotations = {}, initialScale = 1, active = false, onactivate, page = $bindable(0),
+        searchHits = [], activeMatch = null } = $props();
 
   const PAD = 20; // .pages의 padding — 페이지 맨 위를 이만큼 띄워 맞춘다(메인 .viewer와 같게)
   const STEP = 60; // j/k 한 번에 움직일 거리(메인 scrollStep과 같게)
@@ -19,6 +20,8 @@
   let scale = $state(initialScale);
   let rotations = $state({ ...initialRotations }); // { [page]: 0|90|180|270 } — r/R, 메인 창과 별개
   const rot = (i) => rotations[i] ?? 0;
+  // 검색 하이라이트 — 부모가 이 창 문서에서 찾은 결과(searchHits)와 지금 매치(activeMatch)를 넘긴다
+  let hitsByPage = $derived(new Map(searchHits.map(r => [r.page, r.rects])));
   let wraps = [];
   let canvases = [];
   let observer;
@@ -140,6 +143,7 @@
   }
 
   export function focus() { el?.focus(); }
+  export function getScale() { return scale; }
 
   // 지금 보는 위치 — 페이지와 그 안의 세로 위치(배율 적용 전 좌표, gotoPageAndY와 같은 단위)
   export function view() {
@@ -227,6 +231,13 @@
       {@const [pw, ph] = dims(i)}
       <div class="wrap" bind:this={wraps[i]} use:lazy={i} style="width:{pw * scale}px;height:{ph * scale}px">
         <canvas bind:this={canvases[i]}></canvas>
+        <!-- ponytail: 회전한 페이지엔 하이라이트를 안 그린다(좌표 변환 생략), 필요하면 메인 뷰의 회전 변환을 가져올 것 -->
+        {#if rot(i) === 0}
+          {#each hitsByPage.get(i) ?? [] as r}
+            <div class="hit" class:active={activeMatch?.page === i && activeMatch.rect === r}
+                 style="left:{r[0] * scale}px;top:{r[1] * scale}px;width:{(r[2] - r[0]) * scale}px;height:{(r[3] - r[1]) * scale}px"></div>
+          {/each}
+        {/if}
       </div>
     {/each}
   </div>
@@ -267,7 +278,10 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  .wrap { background: #fff; box-shadow: 0 2px 16px rgba(0,0,0,0.6); }
+  /* 메인 창 .highlight와 같은 색 */
+  .hit { position: absolute; background: rgba(255, 200, 0, 0.25); pointer-events: none; }
+  .hit.active { background: rgba(255, 230, 0, 0.65); outline: 2px solid #ffd400; }
+  .wrap { position: relative; background: #fff; box-shadow: 0 2px 16px rgba(0,0,0,0.6); }
   canvas { display: block; width: 100%; height: 100%; }
   :global(body.invert-pages) .split-pane canvas { filter: invert(0.88) hue-rotate(180deg); }
 </style>
