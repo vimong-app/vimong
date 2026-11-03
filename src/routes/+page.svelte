@@ -4073,6 +4073,9 @@
         case 'zoom-fit-height':
           await fitToHeight();
           break;
+        case 'zoom-fit-content':
+          await fitToContentWidth();
+          break;
         case 'zoom-in':
           scale = Math.min(+(scale + 0.25).toFixed(2), 12);
           triggerRerender();

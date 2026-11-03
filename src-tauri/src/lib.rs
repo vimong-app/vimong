@@ -43,6 +43,7 @@ struct Labels {
     actual_size: &'static str,
     zoom_to_fit: &'static str,
     zoom_to_fit_height: &'static str,
+    zoom_to_fit_content: &'static str,
     zoom_in: &'static str,
     zoom_out: &'static str,
     zoom_to_selection: &'static str,
@@ -242,7 +243,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "탭",
             edit: "편집", copy: "복사",
             tools: "도구", pointer: "포인터", text_select: "텍스트 선택", highlight_tool: "하이라이트",
-            view: "보기", actual_size: "실제 크기", zoom_to_fit: "폭 맞춤", zoom_to_fit_height: "높이 맞춤",
+            view: "보기", actual_size: "실제 크기", zoom_to_fit: "폭 맞춤", zoom_to_fit_height: "높이 맞춤", zoom_to_fit_content: "여백 빼고 폭 맞춤",
             zoom_in: "확대", zoom_out: "축소", zoom_to_selection: "선택 영역 확대",
             show_sidebar: "사이드바 보이기", hide_sidebar: "사이드바 숨기기",
             show_toolbar: "툴바 보이기", hide_toolbar: "툴바 숨기기",
@@ -257,7 +258,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "タブ",
             edit: "編集", copy: "コピー",
             tools: "ツール", pointer: "ポインタ", text_select: "テキスト選択", highlight_tool: "ハイライト",
-            view: "表示", actual_size: "実際のサイズ", zoom_to_fit: "幅に合わせる", zoom_to_fit_height: "高さに合わせる",
+            view: "表示", actual_size: "実際のサイズ", zoom_to_fit: "幅に合わせる", zoom_to_fit_height: "高さに合わせる", zoom_to_fit_content: "余白を除いて幅に合わせる",
             zoom_in: "拡大", zoom_out: "縮小", zoom_to_selection: "選択範囲を拡大",
             show_sidebar: "サイドバーを表示", hide_sidebar: "サイドバーを隠す",
             show_toolbar: "ツールバーを表示", hide_toolbar: "ツールバーを隠す",
@@ -272,7 +273,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "标签页",
             edit: "编辑", copy: "复制",
             tools: "工具", pointer: "指针", text_select: "选择文本", highlight_tool: "荧光笔",
-            view: "显示", actual_size: "实际大小", zoom_to_fit: "适合宽度", zoom_to_fit_height: "适合高度",
+            view: "显示", actual_size: "实际大小", zoom_to_fit: "适合宽度", zoom_to_fit_height: "适合高度", zoom_to_fit_content: "去除页边距适合宽度",
             zoom_in: "放大", zoom_out: "缩小", zoom_to_selection: "缩放所选内容",
             show_sidebar: "显示侧边栏", hide_sidebar: "隐藏侧边栏",
             show_toolbar: "显示工具栏", hide_toolbar: "隐藏工具栏",
@@ -287,7 +288,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "標籤頁",
             edit: "編輯", copy: "複製",
             tools: "工具", pointer: "指標", text_select: "選取文字", highlight_tool: "螢光筆",
-            view: "顯示", actual_size: "實際大小", zoom_to_fit: "符合寬度", zoom_to_fit_height: "符合高度",
+            view: "顯示", actual_size: "實際大小", zoom_to_fit: "符合寬度", zoom_to_fit_height: "符合高度", zoom_to_fit_content: "去除頁邊距符合寬度",
             zoom_in: "放大", zoom_out: "縮小", zoom_to_selection: "縮放所選項目",
             show_sidebar: "顯示側邊欄", hide_sidebar: "隱藏側邊欄",
             show_toolbar: "顯示工具列", hide_toolbar: "隱藏工具列",
@@ -302,7 +303,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "Pestaña",
             edit: "Editar", copy: "Copiar",
             tools: "Herramientas", pointer: "Puntero", text_select: "Seleccionar texto", highlight_tool: "Resaltador",
-            view: "Ver", actual_size: "Tamaño real", zoom_to_fit: "Ajustar al ancho", zoom_to_fit_height: "Ajustar a la altura",
+            view: "Ver", actual_size: "Tamaño real", zoom_to_fit: "Ajustar al ancho", zoom_to_fit_height: "Ajustar a la altura", zoom_to_fit_content: "Ajustar al ancho del contenido",
             zoom_in: "Acercar", zoom_out: "Alejar", zoom_to_selection: "Ampliar selección",
             show_sidebar: "Mostrar barra lateral", hide_sidebar: "Ocultar barra lateral",
             show_toolbar: "Mostrar barra de herramientas", hide_toolbar: "Ocultar barra de herramientas",
@@ -317,7 +318,7 @@ fn labels_for(lang: &str) -> Labels {
             tab: "Tab",
             edit: "Edit", copy: "Copy",
             tools: "Tools", pointer: "Pointer", text_select: "Select Text", highlight_tool: "Highlight",
-            view: "View", actual_size: "Actual Size", zoom_to_fit: "Zoom To Fit Width", zoom_to_fit_height: "Zoom To Fit Height",
+            view: "View", actual_size: "Actual Size", zoom_to_fit: "Zoom To Fit Width", zoom_to_fit_height: "Zoom To Fit Height", zoom_to_fit_content: "Zoom To Fit Content Width",
             zoom_in: "Zoom In", zoom_out: "Zoom Out", zoom_to_selection: "Zoom To Selection",
             show_sidebar: "Show Sidebar", hide_sidebar: "Hide Sidebar",
             show_toolbar: "Show Toolbar", hide_toolbar: "Hide Toolbar",
@@ -4209,6 +4210,7 @@ struct AppMenuItems {
     actual_size: MenuItem<tauri::Wry>,
     zoom_fit: MenuItem<tauri::Wry>,
     zoom_fit_h: MenuItem<tauri::Wry>,
+    zoom_fit_c: MenuItem<tauri::Wry>,
     zoom_in: MenuItem<tauri::Wry>,
     zoom_out: MenuItem<tauri::Wry>,
     zoom_sel: MenuItem<tauri::Wry>,
@@ -4242,6 +4244,7 @@ fn relabel_menu(app: &tauri::AppHandle, l: &Labels) {
         let _ = m.actual_size.set_text(l.actual_size);
         let _ = m.zoom_fit.set_text(l.zoom_to_fit);
         let _ = m.zoom_fit_h.set_text(l.zoom_to_fit_height);
+        let _ = m.zoom_fit_c.set_text(l.zoom_to_fit_content);
         let _ = m.zoom_in.set_text(l.zoom_in);
         let _ = m.zoom_out.set_text(l.zoom_out);
         let _ = m.zoom_sel.set_text(l.zoom_to_selection);
@@ -5536,6 +5539,7 @@ pub fn run() {
             let actual_size = MenuItem::with_id(app, "zoom-actual",    l.actual_size,       true, None::<&str>)?;
             let zoom_fit    = MenuItem::with_id(app, "zoom-fit",        l.zoom_to_fit,        true, None::<&str>)?;
             let zoom_fit_h  = MenuItem::with_id(app, "zoom-fit-height", l.zoom_to_fit_height, true, None::<&str>)?;
+            let zoom_fit_c  = MenuItem::with_id(app, "zoom-fit-content", l.zoom_to_fit_content, true, None::<&str>)?;
             // "CmdOrCtrl+Plus"는 muda가 인식 못 하는 키 이름이라 파싱 실패 — Tauri가 파싱
             // 에러를 조용히 무시(.ok())해서 크래시 없이 그냥 단축키가 안 먹는 상태였다.
             // 크롬처럼 물리적 Equal 키(Shift 없이도 눌리는 =/+ 키)에 바로 건다.
@@ -5565,7 +5569,7 @@ pub fn run() {
             ]));
 
             let view_menu   = Submenu::with_items(app, l.view, true,
-                &[&actual_size, &zoom_fit, &zoom_fit_h, &sep_v, &zoom_in, &zoom_out, &zoom_sel, &sep_v2, &toggle_sb, &toggle_tb,
+                &[&actual_size, &zoom_fit, &zoom_fit_c, &zoom_fit_h, &sep_v, &zoom_in, &zoom_out, &zoom_sel, &sep_v2, &toggle_sb, &toggle_tb,
                   &fullscreen,
                   &sep_v3, &view_single, &view_single_cont, &view_two, &view_two_cont, &view_horiz_cont])?;
 
@@ -5612,6 +5616,7 @@ pub fn run() {
                 actual_size: actual_size.clone(),
                 zoom_fit: zoom_fit.clone(),
                 zoom_fit_h: zoom_fit_h.clone(),
+                zoom_fit_c: zoom_fit_c.clone(),
                 zoom_in: zoom_in.clone(),
                 zoom_out: zoom_out.clone(),
                 zoom_sel: zoom_sel.clone(),
@@ -5732,6 +5737,7 @@ pub fn run() {
                 "zoom-actual"    => app.emit("menu", "zoom-actual"),
                 "zoom-fit"       => app.emit("menu", "zoom-fit"),
                 "zoom-fit-height" => app.emit("menu", "zoom-fit-height"),
+                "zoom-fit-content" => app.emit("menu", "zoom-fit-content"),
                 "zoom-in"        => app.emit("menu", "zoom-in"),
                 "zoom-out"       => app.emit("menu", "zoom-out"),
                 "zoom-selection" => app.emit("menu", "zoom-selection"),
