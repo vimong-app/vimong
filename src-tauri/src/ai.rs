@@ -77,10 +77,50 @@ impl Server {
                 .ok()
                 .and_then(|v| v["error"].as_str().or(v["error"]["message"].as_str()).map(String::from))
                 .unwrap_or_else(|| format!("The AI server returned HTTP {code}")),
-            e if self.openai() => format!("Cannot reach the AI server at {} — is its local server running? ({e})", self.base_url()),
-            e => format!("Cannot reach Ollama at {} — is `ollama serve` running? ({e})", self.base_url()),
+            // 연결 자체가 안 될 때 — 프론트(AiPanel aiErrorInfo)가 상황별 안내를 고르게 코드로 넘긴다
+            e => {
+                let url = self.base_url();
+                let provider = if self.openai() { "openai" } else { "ollama" };
+                format!("{UNREACHABLE}|{provider}|{}|{url}|{e}", unreachable_state(&url, || installed(self.openai())))
+            }
         }
     }
+}
+
+// "AI_UNREACHABLE|provider|state|url|detail" — state: "missing"(설치 안 됨) | "stopped"(설치됐지만 꺼져 있음) |
+// "remote"(다른 컴퓨터 주소라 설치 여부를 모름)
+const UNREACHABLE: &str = "AI_UNREACHABLE";
+
+fn unreachable_state(url: &str, installed: impl Fn() -> bool) -> &'static str {
+    let local = ["//127.0.0.1", "//localhost", "//[::1]", "//0.0.0.0"].iter().any(|h| url.contains(h));
+    if !local { "remote" } else if installed() { "stopped" } else { "missing" }
+}
+
+// 이 컴퓨터에 Ollama(또는 OpenAI 호환이면 LM Studio)가 있는지 — 앱 번들이나 명령이 흔한 자리에 있는지만 본다.
+// Finder로 실행한 앱은 PATH가 짧아서 Homebrew 경로를 따로 본다.
+// ponytail: LM Studio 말고 다른 OpenAI 호환 서버(llama.cpp 등)는 설치 여부를 모른다 — 그땐 "설치 안 됨" 안내가 LM Studio 기준으로 나간다
+fn installed(openai: bool) -> bool {
+    let home = std::env::var("HOME").unwrap_or_default();
+    let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default(); // Windows
+    let (bin, paths) = if openai {
+        ("lms", vec![
+            "/Applications/LM Studio.app".to_string(),
+            format!("{home}/Applications/LM Studio.app"),
+            format!("{home}/.lmstudio/bin/lms"),
+            format!("{local_app_data}/Programs/LM Studio/LM Studio.exe"),
+        ])
+    } else {
+        ("ollama", vec![
+            "/Applications/Ollama.app".to_string(),
+            format!("{home}/Applications/Ollama.app"),
+            "/opt/homebrew/bin/ollama".to_string(),
+            "/usr/local/bin/ollama".to_string(),
+            format!("{local_app_data}/Programs/Ollama/ollama.exe"),
+        ])
+    };
+    let on_path = std::env::var_os("PATH")
+        .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(bin).is_file() || d.join(format!("{bin}.exe")).is_file()));
+    on_path || paths.iter().any(|p| std::path::Path::new(p).exists())
 }
 
 static SERVER: std::sync::Mutex<Server> = std::sync::Mutex::new(Server { provider: String::new(), host: String::new(), key: String::new() });
@@ -761,6 +801,20 @@ mod tests {
         assert_eq!(s("ollama", "http://gpu-box:11434"), "http://gpu-box:11434");
         assert_eq!(s("openai", ""), "http://127.0.0.1:1234"); // LM Studio 기본
         assert_eq!(s("openai", "http://localhost:8080/v1/"), "http://localhost:8080"); // .../v1까지 적어도
+    }
+
+    #[test]
+    fn unreachable_server_error_carries_a_code_for_the_ui() {
+        // 9번 포트(discard)는 보통 아무도 안 듣는다 — 연결 거부
+        let s = Server { provider: "ollama".into(), host: "http://127.0.0.1:9".into(), key: String::new() };
+        let err = s.http_err(s.get("/api/tags").call().unwrap_err());
+        let parts: Vec<&str> = err.splitn(5, '|').collect();
+        assert_eq!(parts[..2], ["AI_UNREACHABLE", "ollama"]);
+        assert!(["missing", "stopped"].contains(&parts[2]), "{err}");
+        assert_eq!(parts[3], "http://127.0.0.1:9");
+        assert_eq!(unreachable_state("http://192.168.0.5:11434", || true), "remote");
+        assert_eq!(unreachable_state("http://localhost:1234", || true), "stopped");
+        assert_eq!(unreachable_state("http://127.0.0.1:11434", || false), "missing");
     }
 
     #[test]

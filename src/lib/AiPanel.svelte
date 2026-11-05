@@ -28,6 +28,19 @@
   const savedServer = () => ({ provider: load(PROVIDER_KEY) || 'ollama', host: load(HOST_KEY) ?? '', key: load(API_KEY_KEY) ?? '' });
   const hostReady = invoke('ai_set_server', { server: savedServer() }).catch(() => {});
 
+  // 서버에 연결 자체가 안 될 때 Rust(ai.rs Server::http_err)가 넘기는 "AI_UNREACHABLE|provider|state|url|detail"을
+  // 상황별 안내로 — state: missing(설치 안 됨) | stopped(설치됐지만 꺼짐) | remote(다른 컴퓨터 주소). 그 밖의 오류는 그대로
+  export function aiErrorInfo(err, t) {
+    const [code, provider, state, url, ...rest] = String(err).split('|');
+    if (code !== 'AI_UNREACHABLE') return { text: String(err), detail: '', link: '' };
+    const app = provider === 'openai' ? 'lmstudio' : 'ollama';
+    return {
+      text: t(state === 'remote' ? 'ai.err_remote' : `ai.err_${app}_${state}`, { url }),
+      detail: rest.join('|'),
+      link: state === 'missing' ? (app === 'ollama' ? 'https://ollama.com/download' : 'https://lmstudio.ai') : '',
+    };
+  }
+
   export function aiSettings() {
     return { ...savedServer(), model: load(MODEL_KEY) ?? ai.model, context: load(CONTEXT_KEY) ?? 'page' };
   }
@@ -282,7 +295,15 @@
         {/if}
       {/if}
     {/each}
-    {#if ai.error || chat.error}<div class="ai-msg ai-error">{ai.error || chat.error}</div>{/if}
+    {#if ai.error || chat.error}
+      {@const err = aiErrorInfo(ai.error || chat.error, t)}
+      <!-- 링크는 onListClick이 브라우저로 연다 -->
+      <!-- 기술적인 원인(Connection refused 등)은 마우스를 올렸을 때만 -->
+      <div class="ai-msg ai-error" title={err.detail}>
+        {err.text}
+        {#if err.link}<a href={err.link}>{t('ai.err_download')}</a>{/if}
+      </div>
+    {/if}
   </div>
   {#if codeView}
     <!-- 패널 안에 두어야 Esc/j/k가 onPanelKeydown으로 온다. position: fixed라 화면은 앱 전체를 덮는다 -->
@@ -323,6 +344,7 @@
   .ai-assistant :global(:is(p, ul, ol, pre)) { margin: 0 0 6px; }
   .ai-assistant :global(pre) { overflow-x: auto; padding: 6px; border-radius: 4px; background: var(--sh-9); }
   .ai-error { color: #e5484d; }
+  .ai-error a { color: inherit; text-decoration: underline; }
   /* +page.svelte의 .search-scope(검색 범위 표시)와 같은 모양 */
   .ai-scope { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 3px; background: rgba(58, 110, 168, 0.25); color: var(--sh-21); font-size: 0.75rem; }
   .ai-scope button { background: none; border: none; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; }

@@ -14,7 +14,7 @@
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
   import SplitPane from '$lib/SplitPane.svelte';
-  import AiPanel, { askAi, setAiScope, saveLastReply, aiState, aiSettings, applyAiSettings, loadModels as loadAiModels, pullModel } from '$lib/AiPanel.svelte';
+  import AiPanel, { askAi, setAiScope, saveLastReply, aiState, aiSettings, applyAiSettings, loadModels as loadAiModels, pullModel, aiErrorInfo } from '$lib/AiPanel.svelte';
   import { createHistory } from '$lib/history.js';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
@@ -8746,7 +8746,13 @@
               onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); openAiSettingsTab(); } }} />
             <button type="button" class="synctex-help-btn" onclick={openAiSettingsTab}>{t('settings.ai_refresh')}</button>
           </div>
-          <span class="quit-desc">{aiState.error || t(settingsAiProviderDraft === 'openai' ? 'settings.ai_host_hint_openai' : 'settings.ai_host_hint')}</span>
+          {#if aiState.error}
+            {@const err = aiErrorInfo(aiState.error, t)}
+            <span class="quit-desc ai-settings-error" title={err.detail}>{err.text}
+              {#if err.link}<button type="button" class="synctex-help-btn" onclick={() => openUrl(err.link)}>{t('ai.err_download')}</button>{/if}</span>
+          {:else}
+            <span class="quit-desc">{t(settingsAiProviderDraft === 'openai' ? 'settings.ai_host_hint_openai' : 'settings.ai_host_hint')}</span>
+          {/if}
         </div>
         {#if settingsAiProviderDraft === 'openai'}
           <div class="settings-row">
@@ -10475,6 +10481,7 @@
   .settings-row-col { flex-direction: column; align-items: stretch; gap: 8px; }
   .synctex-preset-row { display: flex; align-items: center; gap: 10px; }
   .synctex-preset-row select, .synctex-preset-row input { flex: 1; }
+  .ai-settings-error { color: #e5484d; }
   .ai-model-name { flex: 1; font-family: ui-monospace, monospace; font-size: 0.8rem; }
   .synctex-help-btn {
     background: none; border: none; padding: 0; margin: 0;
