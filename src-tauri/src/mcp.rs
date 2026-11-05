@@ -35,7 +35,7 @@ pub fn run() {
     }
 }
 
-fn handle(method: &str, params: &Value) -> Result<Value, String> {
+pub(crate) fn handle(method: &str, params: &Value) -> Result<Value, String> {
     match method {
         "initialize" => Ok(json!({
             "protocolVersion": params["protocolVersion"].as_str().unwrap_or("2025-06-18"),
@@ -526,6 +526,10 @@ fn notes(path: &str, spec: &str, page_count: usize) -> Result<String, String> {
     Ok(if out.is_empty() { "No highlights or notes found.".to_string() } else { out })
 }
 
+pub(crate) fn outline_entries(path: &str) -> Result<Vec<super::TocEntry>, String> {
+    Ok(open_doc(path)?.outlines().map_err(|e| e.to_string())?.into_iter().map(super::convert_outline).collect())
+}
+
 fn outline(path: &str) -> Result<String, String> {
     fn walk(entries: &[super::TocEntry], depth: usize, out: &mut String) {
         for e in entries {
@@ -534,7 +538,7 @@ fn outline(path: &str) -> Result<String, String> {
             walk(&e.children, depth + 1, out);
         }
     }
-    let toc: Vec<super::TocEntry> = open_doc(path)?.outlines().map_err(|e| e.to_string())?.into_iter().map(super::convert_outline).collect();
+    let toc = outline_entries(path)?;
     let mut out = String::new();
     walk(&toc, 0, &mut out);
     Ok(if out.is_empty() { "This document has no outline.".to_string() } else { out })
@@ -548,7 +552,7 @@ fn pages_schema() -> Value {
 // 제목으로 보고, 큰 크기부터 #, ##, ### 순서로 수준을 매긴다.
 // ponytail: 글자 크기만 본다 — 본문 크기의 굵은 제목, 목록, 표는 평문 문단으로 나온다. 필요하면
 // TextCharFlags(BOLD)와 줄 머리 기호(•, 1.)로 확장
-fn to_markdown(path: &str, spec: &str, page_count: usize) -> Result<String, String> {
+pub(crate) fn to_markdown(path: &str, spec: &str, page_count: usize) -> Result<String, String> {
     let doc = open_doc(path)?;
     let mut pages = Vec::new();
     for i in super::parse_page_spec(spec, page_count)? {

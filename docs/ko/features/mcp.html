@@ -69,10 +69,11 @@
       <table class="mt-4 w-full border-collapse text-sm">
         <tbody class="divide-y divide-white/10">
           <tr><td class="py-3 pr-4 text-white">현재 페이지 텍스트</td><td class="py-3 text-neutral-400">지금 보는 페이지의 텍스트 — "이 페이지 요약해줘"</td></tr>
-          <tr><td class="py-3 pr-4 text-white">현재 파일 전체 텍스트</td><td class="py-3 text-neutral-400">지금 보는 파일 전체의 텍스트, 앞에서부터 4만 자까지 — "결론이 뭐야?"</td></tr>
+          <tr><td class="py-3 pr-4 text-white">현재 파일 전체 텍스트</td><td class="py-3 text-neutral-400">지금 보는 파일 전체의 텍스트 — "결론이 뭐야?" (긴 파일은 아래 참고)</td></tr>
           <tr><td class="py-3 pr-4 text-white">현재 페이지 텍스트 + 이미지</td><td class="py-3 text-neutral-400">페이지 텍스트와 페이지를 찍은 그림 — 그림, 표, 수식, 스캔 페이지. 비전 모델이 필요합니다</td></tr>
         </tbody>
       </table>
+      <p class="mt-3 text-neutral-400">"현재 파일 전체 텍스트"에서 장, 절, 페이지 범위를 물으면("16장 요약해줘") Vimong이 목차에서 그 부분을 찾아 모든 페이지를 읽습니다. 길면 여러 번에 나눠 읽고, 무엇을 읽었는지 답 위에 표시합니다. 그 밖의 질문은 <span class="kbd">qwen3</span>, <span class="kbd">llama3.1</span>처럼 도구를 지원하는 모델이면 파일을 검색해서 답하고, 그 밖의 모델에서는 앞에서부터 4만 자까지만 보냅니다.</p>
       <p class="mt-3 text-neutral-400">문서는 질문하는 순간에 읽기 때문에, 페이지를 넘긴 뒤에는 "이 페이지"가 지금 페이지를 가리킵니다. 대화는 파일마다 따로 남습니다.</p>
     </section>
     <section class="mt-8">

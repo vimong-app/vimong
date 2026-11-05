@@ -69,10 +69,11 @@
       <table class="mt-4 w-full border-collapse text-sm">
         <tbody class="divide-y divide-white/10">
           <tr><td class="py-3 pr-4 text-white">This page (text)</td><td class="py-3 text-neutral-400">The text of the page you're viewing — "summarize this page"</td></tr>
-          <tr><td class="py-3 pr-4 text-white">Whole file (text)</td><td class="py-3 text-neutral-400">The text of the whole file you're viewing, up to the first 40,000 characters — "what is the conclusion?"</td></tr>
+          <tr><td class="py-3 pr-4 text-white">Whole file (text)</td><td class="py-3 text-neutral-400">The text of the whole file you're viewing — "what is the conclusion?" (see below for long files)</td></tr>
           <tr><td class="py-3 pr-4 text-white">This page (text + image)</td><td class="py-3 text-neutral-400">The page text plus a picture of the page — figures, tables, equations and scanned pages. Needs a vision model</td></tr>
         </tbody>
       </table>
+      <p class="mt-3 text-neutral-400">With "Whole file (text)", asking about a chapter, a section or a page range — "summarize chapter 16" — makes Vimong find that part in the outline and read every page of it, in several passes when it is long. The reply lists what was read. Other questions are answered by searching the file when the model supports tools, such as <span class="kbd">qwen3</span> and <span class="kbd">llama3.1</span>; with other models, the first 40,000 characters are sent.</p>
       <p class="mt-3 text-neutral-400">The document is read at the moment you ask, so after turning pages, "this page" means the page you're on now. Each file keeps its own conversation.</p>
     </section>
     <section class="mt-8">

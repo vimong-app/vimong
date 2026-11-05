@@ -45,7 +45,11 @@
     chat.messages.push({ role: 'assistant', content: '' });
     const reply = chat.messages[chat.messages.length - 1];
     const onEvent = new Channel();
-    onEvent.onmessage = (m) => { if (m.notice) reply.notice = m.notice; else reply.content += m.delta; };
+    onEvent.onmessage = (m) => {
+      if (m.notice) reply.notice = m.notice;
+      else if (m.tool) { if (!reply.tools) reply.tools = []; reply.tools.push({ name: m.tool, args: m.args }); }
+      else reply.content += m.delta;
+    };
     ai.busy = true;
     chat.error = '';
     try {
@@ -108,6 +112,14 @@
     askAi(path, q);
   }
 
+  // 문서를 찾아 읽은 기록 — 모델의 도구 호출, 그리고 "파일 전체"에서 앱이 직접 범위를 읽은 단계(scope/read/merge,
+  // Rust read_scope). 답이 어디서 나왔는지 보이게
+  function toolLabel({ name, args }) {
+    if (name === 'search_text') return t('ai.tool_search_text', { q: args.query ?? '' });
+    if (name === 'get_page_text') return args.pages ? t('ai.tool_get_page_text', { p: args.pages }) : t('ai.tool_get_page_text_current');
+    return t('ai.tool_' + name, args).replace(/\s+/g, ' ').trim();
+  }
+
   // 답 HTML은 {@html} 대신 직접 넣는다 — 실제 앱(WKWebView)에서 새 말풍선이 이전 답의 HTML을 단 채로 생기고
   // {@html}이 첫 렌더링을 건너뛰어, 첫 토큰이 올 때까지 이전 답이 그대로 보였다(MutationObserver로 확인. 따로 띄운
   // WebKit/happy-dom에서는 재현이 안 돼 Svelte 쪽 원인은 못 찾았다). 만들 때와 바뀔 때마다 덮어쓰면 처음 상태와 상관없다.
@@ -147,6 +159,7 @@
         <div class="ai-msg ai-user">{m.content}</div>
       {:else}
         {#if m.notice}<div class="ai-msg ai-notice">{t('ai.notice_' + m.notice)}</div>{/if}
+        {#each m.tools ?? [] as tool, j (j)}<div class="ai-msg ai-tool">{toolLabel(tool)}</div>{/each}
         <div class="ai-msg ai-assistant" use:markdown={m.content}></div>
       {/if}
     {/each}
@@ -172,6 +185,8 @@
   .ai-assistant :global(:is(p, ul, ol, pre)) { margin: 0 0 6px; }
   .ai-assistant :global(pre) { overflow-x: auto; padding: 6px; border-radius: 4px; background: var(--sh-9); }
   .ai-error { color: #e5484d; }
+  .ai-tool { font-size: 0.72rem; color: var(--sh-15); margin-bottom: -4px; }
+  .ai-tool::before { content: '↳ '; }
   .ai-notice { font-size: 0.72rem; padding: 4px 6px; border-radius: 4px; border-left: 3px solid #f5a524; background: var(--sh-9); }
   .ai-textarea { resize: vertical; font: inherit; font-size: 0.8rem; padding: 6px; }
 </style>
