@@ -33,11 +33,12 @@
   export function aiErrorInfo(err, t) {
     const [code, provider, state, url, ...rest] = String(err).split('|');
     if (code !== 'AI_UNREACHABLE') return { text: String(err), detail: '', link: '' };
-    const app = provider === 'openai' ? 'lmstudio' : 'ollama';
+    // OpenAI 호환은 어떤 서버인지 모르니 설치·원격 구분 없이 "AI 서버를 실행해 주세요"만
+    const key = provider === 'openai' || state === 'stopped' ? 'ai.err_stopped' : state === 'remote' ? 'ai.err_remote' : 'ai.err_ollama_missing';
     return {
-      text: t(state === 'remote' ? 'ai.err_remote' : `ai.err_${app}_${state}`, { url }),
+      text: t(key, { url }),
       detail: rest.join('|'),
-      link: state === 'missing' ? (app === 'ollama' ? 'https://ollama.com/download' : 'https://lmstudio.ai') : '',
+      link: provider !== 'openai' && state === 'missing' ? 'https://ollama.com/download' : '',
     };
   }
 

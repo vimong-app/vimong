@@ -81,7 +81,7 @@ impl Server {
             e => {
                 let url = self.base_url();
                 let provider = if self.openai() { "openai" } else { "ollama" };
-                format!("{UNREACHABLE}|{provider}|{}|{url}|{e}", unreachable_state(&url, || installed(self.openai())))
+                format!("{UNREACHABLE}|{provider}|{}|{url}|{e}", unreachable_state(&url, || self.openai() || ollama_installed()))
             }
         }
     }
@@ -96,28 +96,20 @@ fn unreachable_state(url: &str, installed: impl Fn() -> bool) -> &'static str {
     if !local { "remote" } else if installed() { "stopped" } else { "missing" }
 }
 
-// 이 컴퓨터에 Ollama(또는 OpenAI 호환이면 LM Studio)가 있는지 — 앱 번들이나 명령이 흔한 자리에 있는지만 본다.
+// 이 컴퓨터에 Ollama가 있는지 — 앱 번들이나 명령이 흔한 자리에 있는지만 본다.
 // Finder로 실행한 앱은 PATH가 짧아서 Homebrew 경로를 따로 본다.
-// ponytail: LM Studio 말고 다른 OpenAI 호환 서버(llama.cpp 등)는 설치 여부를 모른다 — 그땐 "설치 안 됨" 안내가 LM Studio 기준으로 나간다
-fn installed(openai: bool) -> bool {
+// OpenAI 호환은 어떤 서버(LM Studio, llama.cpp…)인지 알 수 없어 설치 여부를 보지 않는다 — 프론트가 설정 확인 안내를 낸다
+fn ollama_installed() -> bool {
     let home = std::env::var("HOME").unwrap_or_default();
     let local_app_data = std::env::var("LOCALAPPDATA").unwrap_or_default(); // Windows
-    let (bin, paths) = if openai {
-        ("lms", vec![
-            "/Applications/LM Studio.app".to_string(),
-            format!("{home}/Applications/LM Studio.app"),
-            format!("{home}/.lmstudio/bin/lms"),
-            format!("{local_app_data}/Programs/LM Studio/LM Studio.exe"),
-        ])
-    } else {
-        ("ollama", vec![
-            "/Applications/Ollama.app".to_string(),
-            format!("{home}/Applications/Ollama.app"),
-            "/opt/homebrew/bin/ollama".to_string(),
-            "/usr/local/bin/ollama".to_string(),
-            format!("{local_app_data}/Programs/Ollama/ollama.exe"),
-        ])
-    };
+    let bin = "ollama";
+    let paths = [
+        "/Applications/Ollama.app".to_string(),
+        format!("{home}/Applications/Ollama.app"),
+        "/opt/homebrew/bin/ollama".to_string(),
+        "/usr/local/bin/ollama".to_string(),
+        format!("{local_app_data}/Programs/Ollama/ollama.exe"),
+    ];
     let on_path = std::env::var_os("PATH")
         .is_some_and(|p| std::env::split_paths(&p).any(|d| d.join(bin).is_file() || d.join(format!("{bin}.exe")).is_file()));
     on_path || paths.iter().any(|p| std::path::Path::new(p).exists())
