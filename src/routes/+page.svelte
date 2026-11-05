@@ -4922,15 +4922,17 @@
       requestAnimationFrame(() => { if (document.activeElement !== searchInputEl) searchInputEl?.focus(); });
     });
   }
-  // toc 우클릭 "AI에게 묻기" — 선택한 섹션들로 AI 대화의 범위를 정한다. 검색 범위처럼 지울 때까지(AI 탭의 ✕)
-  // 그 문서의 대화에 계속 적용되고, AI 탭 입력창 위에 늘 보인다. 범위 전체를 읽는 건 Rust(ai.rs read_pages)
-  function askAiInTocSelection() {
-    const pages = selectedTocPages();
+  // toc/썸네일 우클릭 "AI에게 묻기" — 선택한 페이지들(0-indexed Set)로 AI 대화의 범위를 정한다. 검색 범위처럼 지울
+  // 때까지(AI 탭의 ✕) 그 문서의 대화에 계속 적용되고, AI 탭 입력창 위에 늘 보인다. 범위 전체를 읽는 건 Rust(ai.rs read_pages)
+  function askAiInPages(pages, title = '') {
     if (pages.size === 0) return;
-    const one = selectedTocIds.size <= 1 ? flatToc.find(it => it.id === selectedTocId) : null;
-    setAiScope(filePath, { spec: pagesToSpec(pages), title: one?.title ?? '' });
-    // 메뉴가 닫히며 포커스를 목차로 돌려놓은 뒤라 한 번 더 입력창으로(searchInTocSelection과 같은 이유)
+    setAiScope(filePath, { spec: pagesToSpec(pages), title });
+    // 메뉴가 닫히며 포커스를 원래 자리로 돌려놓은 뒤라 한 번 더 입력창으로(searchInTocSelection과 같은 이유)
     openAiPanel().then(() => requestAnimationFrame(() => document.querySelector('.ai-textarea')?.focus()));
+  }
+  function askAiInTocSelection() {
+    const one = selectedTocIds.size <= 1 ? flatToc.find(it => it.id === selectedTocId) : null;
+    askAiInPages(selectedTocPages(), one?.title ?? '');
   }
   function clearSearchScope() {
     searchScope = null;
@@ -5220,7 +5222,12 @@
       text: t('context.save_images'),
       action: () => exportImagesForPages(selectedThumbs.size > 1 ? [...selectedThumbs] : [i]),
     });
-    const menu = await Menu.new({ items: [exportItem, saveImagesItem] });
+    // hwp는 AI가 내용을 못 읽는다 — 목차 메뉴와 같이 뺀다
+    const askAiItems = hwpMode ? [] : [await MenuItem.new({
+      text: t('context.ask_ai'),
+      action: () => askAiInPages(selectedThumbs.size > 1 ? new Set(selectedThumbs) : new Set([i])),
+    })];
+    const menu = await Menu.new({ items: [exportItem, saveImagesItem, ...askAiItems] });
     await menu.popup();
   }
 
