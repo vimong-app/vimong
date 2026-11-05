@@ -5427,6 +5427,23 @@
       return;
     }
 
+    // 내보내기 개수 확인창은 내보내기 창 위에 겹쳐 뜨므로 다른 모달보다 먼저 키를 가로챈다 — 아래
+    // 내보내기 창 분기가 먼저 잡으면 Tab이 막히지 않아 포커스가 아래 창으로 샌다.
+    if (showExportManyConfirm) {
+      if (['Shift','Control','Alt','Meta','Enter'].includes(key)) return;
+      if (e.metaKey || e.ctrlKey) return;
+      if (key === 'Tab') {
+        e.preventDefault();
+        const buttons = [...document.querySelectorAll('.export-many-modal button')];
+        const idx = buttons.indexOf(document.activeElement);
+        const next = e.shiftKey
+          ? buttons[(idx - 1 + buttons.length) % buttons.length]
+          : buttons[(idx + 1) % buttons.length];
+        next?.focus();
+      }
+      return;
+    }
+
     // 문서 정보 모달이 열려 있으면 모달 전용 키만 처리
     if (showFileInfo) {
       if (['Shift','Control','Alt','Meta','Enter'].includes(key)) return;
@@ -5556,20 +5573,6 @@
       if (key === 'Tab') {
         e.preventDefault();
         const buttons = [...document.querySelectorAll('.quit-modal button')];
-        const idx = buttons.indexOf(document.activeElement);
-        const next = e.shiftKey
-          ? buttons[(idx - 1 + buttons.length) % buttons.length]
-          : buttons[(idx + 1) % buttons.length];
-        next?.focus();
-      }
-      return;
-    }
-    if (showExportManyConfirm) {
-      if (['Shift','Control','Alt','Meta','Enter'].includes(key)) return;
-      if (e.metaKey || e.ctrlKey) return;
-      if (key === 'Tab') {
-        e.preventDefault();
-        const buttons = [...document.querySelectorAll('.export-many-modal button')];
         const idx = buttons.indexOf(document.activeElement);
         const next = e.shiftKey
           ? buttons[(idx - 1 + buttons.length) % buttons.length]
@@ -8983,10 +8986,10 @@
 
 <!-- ── 내보내기 파일 개수 확인 modal (취소에 기본 포커스) ── -->
 {#if showExportManyConfirm}
+  <!-- 바깥 클릭으로는 안 닫힌다 — 취소/내보내기(또는 Esc)로 명시적으로 고를 때만 닫음 -->
   <div class="overlay" role="dialog" aria-modal="true"
-       onclick={() => resolveExportMany(false)}
        onkeydown={(e) => e.key === 'Escape' && resolveExportMany(false)}>
-    <div class="modal quit-modal export-many-modal" onclick={(e) => e.stopPropagation()}>
+    <div class="modal quit-modal export-many-modal">
       <h2>{t(exportManyMerge ? 'export.confirm_many_merge' : 'export.confirm_many', { n: exportManyCount })}</h2>
       <div class="quit-actions">
         <!-- Enter로 실행되는 건 포커스된 '취소'이므로 기본 버튼 스타일도 '취소'에 준다 -->
