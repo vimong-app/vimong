@@ -40,7 +40,7 @@ conventions Vim users already know.
 - **Tabs** — `Cmd+T` for a new tab, `gt`/`gT` to switch, `:tabonly`/`:tabmove` and other vim tab commands
 - **Split view** — `:vsplit`/`:split` to view two places in a PDF, or two different documents, side by side; each window scrolls, zooms and searches on its own
 - **Presentation mode** — `p` to enter a fullscreen slideshow
-- **AI integration** — press `a` to ask a local AI model (Ollama) about the page, the selection, or a figure without your documents leaving your computer; or let Claude and other AI assistants see the page you're on, read your highlights, and jump pages for you (MCP)
+- **AI integration** — press `a` to ask a model on an AI server (Ollama, LM Studio and others) about the page, the selection, or a figure — with an AI server on this computer, your documents never leave it; or let Claude and other AI assistants see the page you're on, read your highlights, and jump pages for you (MCP)
 
 See full descriptions on the [website](https://vimong.app/en/).
 
@@ -58,9 +58,9 @@ Or download the `.dmg` from [Releases](https://github.com/vimong-app/vimong/rele
 
 ## AI integration
 
-### In Vimong (local AI)
+### In Vimong
 
-Press `a` (or `:ai {question}`) to open the AI tab in the sidebar and ask about the page you're reading. Answers come from a model running locally through [Ollama](https://ollama.com), so nothing leaves your computer. Pick what goes along with each question — this page's text, the whole file's text, or the page text plus an image of the page for vision models; selected text is always included. To ask about a specific part, right-click entries in the outline or pages in the thumbnails and choose **Ask AI...** — every question then reads that whole part. Save a reply as a Markdown file with its **Save** button or `:ai save`; page images it was given are saved next to it.
+Press `a` (or `:ai {question}`) to open the AI tab in the sidebar and ask about the page you're reading. Answers come from a model on the AI server set in Settings → AI — a program such as [Ollama](https://ollama.com) or LM Studio that runs the model. With an AI server on this computer, nothing leaves it. Pick what goes along with each question — this page's text, the whole file's text, or the page text plus an image of the page for vision models; selected text is always included. To ask about a specific part, right-click entries in the outline or pages in the thumbnails and choose **Ask AI...** — every question then reads that whole part. Save a reply as a Markdown file with its **Save** button or `:ai save`; page images it was given are saved next to it.
 
 ```bash
 brew install ollama
@@ -68,7 +68,7 @@ ollama pull qwen3:8b       # questions about text
 ollama pull qwen2.5vl:7b   # figures and scanned pages (vision)
 ```
 
-LM Studio, llama.cpp's `llama-server`, MLX-LM, Jan and other OpenAI-compatible servers work too — set **Server** to **OpenAI-compatible** in Settings → AI.
+LM Studio, llama.cpp's `llama-server`, MLX-LM, Jan and other OpenAI-compatible AI servers work too — set **Server** to **OpenAI-compatible** in Settings → AI.
 
 See the [AI integration page](https://vimong.app/en/features/mcp.html) for details.
 

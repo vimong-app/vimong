@@ -4,14 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>AI 연동 — Vimong</title>
-  <meta name="description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 로컬 AI 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
+  <meta name="description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 AI 서버(Ollama, LM Studio 등)의 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
   <link rel="canonical" href="https://vimong.app/ko/features/mcp.html">
   <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/mcp.html">
   <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/mcp.html">
   <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/mcp.html">
   <meta property="og:type" content="article">
   <meta property="og:title" content="AI 연동 — Vimong">
-  <meta property="og:description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 로컬 AI 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
+  <meta property="og:description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 AI 서버(Ollama, LM Studio 등)의 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
   <meta property="og:image" content="https://vimong.app/assets/icon.png">
   <meta property="og:url" content="https://vimong.app/ko/features/mcp.html">
   <link rel="icon" href="../../assets/favicon.png?v=7">
@@ -42,14 +42,14 @@
     <p class="mt-3 text-neutral-400">지금 읽고 있는 문서에 AI를 쓰는 방법은 두 가지입니다:</p>
     <table class="mt-4 w-full border-collapse text-sm">
       <tbody class="divide-y divide-white/10">
-        <tr><td class="py-3 pr-4"><a href="#in-app" class="text-white hover:underline">Vimong 안에서</a></td><td class="py-3 text-neutral-400"><span class="kbd">a</span>를 누르고 내 컴퓨터에서 돌아가는 모델(Ollama)에게 묻습니다. 문서가 컴퓨터 밖으로 나가지 않습니다</td></tr>
+        <tr><td class="py-3 pr-4"><a href="#in-app" class="text-white hover:underline">Vimong 안에서</a></td><td class="py-3 text-neutral-400"><span class="kbd">a</span>를 누르고 AI 서버(Ollama, LM Studio 등)의 모델에게 묻습니다. 이 컴퓨터의 AI 서버를 쓰면 문서가 컴퓨터 밖으로 나가지 않습니다</td></tr>
         <tr><td class="py-3 pr-4"><a href="#mcp" class="text-white hover:underline">다른 AI 앱에서</a></td><td class="py-3 text-neutral-400">Claude 같은 어시스턴트가 내장 MCP 서버를 통해 지금 보는 페이지를 읽고, 그림을 보고, 문장을 하이라이트하고, 페이지를 이동합니다</td></tr>
       </tbody>
     </table>
 
     <section id="in-app" class="mt-12 scroll-mt-24">
-      <h2 class="text-lg font-semibold text-white">Vimong 안에서 (로컬 AI)</h2>
-      <p class="mt-3 text-neutral-400"><span class="kbd">a</span>를 누르면 사이드바에 AI 탭이 열리고, 지금 읽고 있는 페이지에 대해 물어볼 수 있습니다. 답은 <a href="https://ollama.com" class="text-white hover:underline">Ollama</a>로 내 컴퓨터에서 돌아가는 모델이 만들기 때문에 문서가 컴퓨터 밖으로 나가지 않고, 계정이나 API 키도 필요 없습니다.</p>
+      <h2 class="text-lg font-semibold text-white">Vimong 안에서</h2>
+      <p class="mt-3 text-neutral-400"><span class="kbd">a</span>를 누르면 사이드바에 AI 탭이 열리고, 지금 읽고 있는 페이지에 대해 물어볼 수 있습니다. 답은 설정 → AI에서 정한 <strong class="text-white">AI 서버</strong>의 모델이 만듭니다. AI 서버는 <a href="https://ollama.com" class="text-white hover:underline">Ollama</a>나 LM Studio처럼 모델을 실행해 주는 프로그램입니다. 이 컴퓨터의 AI 서버를 쓰면 문서가 컴퓨터 밖으로 나가지 않고, 계정이나 API 키도 필요 없습니다.</p>
     <section class="mt-8">
       <h3 class="font-semibold text-white">키</h3>
       <table class="mt-4 w-full border-collapse text-sm">
@@ -80,14 +80,14 @@
     </section>
     <section class="mt-8">
       <h3 class="font-semibold text-white">설정</h3>
-      <p class="mt-3 text-neutral-400">Ollama를 설치하고 모델을 받습니다:</p>
+      <p class="mt-3 text-neutral-400">AI 서버가 필요합니다. 기본은 Ollama입니다 — 설치하고 모델을 받습니다:</p>
       <pre class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] p-6 font-mono text-sm text-neutral-300">brew install ollama
 ollama serve            # Ollama 앱을 쓰면 필요 없음
 ollama pull qwen3:8b    # 텍스트 질문용
 ollama pull qwen2.5vl:7b  # 그림·스캔 페이지용 (비전)</pre>
-      <p class="mt-3 text-neutral-400">모델은 패널의 메뉴에서 고르고, 앱을 끌 때까지 유지됩니다. <strong class="text-white">설정 → AI</strong>에서 기본 모델과 기본으로 보낼 내용을 정하고, 설치된 모델을 업데이트하거나 새 모델을 받고, 다른 컴퓨터의 Ollama 주소를 지정할 수 있습니다. 메모리 16GB Mac에서는 7~14B(5~9GB) 모델이 무난하고, 비전 모델로는 <span class="kbd">gemma3:12b</span>, <span class="kbd">llama3.2-vision:11b</span>도 쓸 수 있습니다.</p>
-      <p class="mt-3 text-neutral-400">다른 로컬 AI 앱을 쓰려면 설정 → AI에서 <strong class="text-white">서버 종류</strong>를 <strong class="text-white">OpenAI 호환</strong>으로 바꾸세요. <a href="https://lmstudio.ai" class="text-white hover:underline">LM Studio</a>(MLX로 Apple Silicon에서 빠름), llama.cpp의 <span class="kbd">llama-server</span>, MLX-LM, Jan 등 OpenAI API를 쓰는 서버를 쓸 수 있습니다. 그 앱에서 로컬 서버를 켜고 모델을 올린 뒤, 컨텍스트 길이를 16k 이상으로 두세요. 모델 받기와 업데이트는 그 앱에서 합니다.</p>
-      <p class="mt-3 text-neutral-400">Vimong은 <span class="kbd">127.0.0.1:11434</span>의 Ollama에 연결합니다. 설정 → AI(또는 <span class="kbd">OLLAMA_HOST</span>)에서 다른 주소를 지정할 수 있고, http 주소만 지원합니다.</p>
+      <p class="mt-3 text-neutral-400">모델은 패널의 메뉴에서 고르고, 앱을 끌 때까지 유지됩니다. <strong class="text-white">설정 → AI</strong>에서 기본 모델과 기본으로 보낼 내용을 정하고, 설치된 모델을 업데이트하거나 새 모델을 받고, 다른 컴퓨터의 AI 서버 주소를 지정할 수 있습니다. 메모리 16GB Mac에서는 7~14B(5~9GB) 모델이 무난하고, 비전 모델로는 <span class="kbd">gemma3:12b</span>, <span class="kbd">llama3.2-vision:11b</span>도 쓸 수 있습니다.</p>
+      <p class="mt-3 text-neutral-400">Ollama 대신 다른 AI 서버를 쓰려면 설정 → AI에서 <strong class="text-white">서버 종류</strong>를 <strong class="text-white">OpenAI 호환</strong>으로 바꾸세요. <a href="https://lmstudio.ai" class="text-white hover:underline">LM Studio</a>(MLX로 Apple Silicon에서 빠름), llama.cpp의 <span class="kbd">llama-server</span>, MLX-LM, Jan 등 OpenAI API를 쓰는 서버를 쓸 수 있습니다. 그 앱에서 서버를 켜고 모델을 올린 뒤, 컨텍스트 길이를 16k 이상으로 두세요. 모델 받기와 업데이트는 그 앱에서 합니다.</p>
+      <p class="mt-3 text-neutral-400">Vimong은 <span class="kbd">127.0.0.1:11434</span>의 Ollama에 연결합니다. 설정 → AI(또는 <span class="kbd">OLLAMA_HOST</span>)에서 다른 주소를 지정할 수 있고, http 주소만 지원합니다. AI 서버에 연결할 수 없으면 AI 탭에 "AI 서버를 실행해 주세요."가 표시됩니다.</p>
     </section>
     <section class="mt-8">
       <h3 class="font-semibold text-white">알아두면 좋은 점</h3>
