@@ -5778,6 +5778,7 @@ pub fn run() {
             ai::ai_models,
             ai::ai_chat,
             ai::ai_stop,
+            ai::ai_save_markdown,
             read_file_bytes,
             get_file_mtime,
             open_pdf,

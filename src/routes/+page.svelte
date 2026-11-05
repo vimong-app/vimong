@@ -14,7 +14,7 @@
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
   import SplitPane from '$lib/SplitPane.svelte';
-  import AiPanel, { askAi, setAiScope } from '$lib/AiPanel.svelte';
+  import AiPanel, { askAi, setAiScope, saveLastReply } from '$lib/AiPanel.svelte';
   import { createHistory } from '$lib/history.js';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
@@ -7043,6 +7043,8 @@
       await loadDocInfo();
     } else if (cmd === 'print' || cmd === 'p') {
       await printDocument();
+    } else if (cmd === 'ai save') {
+      if (!saveLastReply(filePath)) statusMsg = t('status.ai_nothing_to_save');
     } else if (cmd === 'ai' || cmd.startsWith('ai ')) {
       await openAiPanel(cmd.slice(3));
     } else if (cmd === 'images') {
@@ -8417,6 +8419,7 @@
               <tr><td>:font</td><td>{t('commands.file.font')}</td></tr>
               <tr><td>:google [text] / :g [text]</td><td>{t('commands.file.google')}</td></tr>
               <tr><td>:ai [question]</td><td>{t('commands.file.ai')}</td></tr>
+              <tr><td>:ai save</td><td>{t('commands.file.ai_save')}</td></tr>
               <tr><td>:set / :settings</td><td>{t('shortcuts.file.settings')}</td></tr>
               <tr><td>:set lang={'{code}'}</td><td>{t('commands.file.set_lang')}</td></tr>
               <tr><td>:?</td><td>{t('shortcuts.file.open_help')}</td></tr>

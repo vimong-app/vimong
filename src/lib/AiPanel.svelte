@@ -1,6 +1,7 @@
 <script module>
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
+  import { save as saveDialog } from '@tauri-apps/plugin-dialog';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { createHistory } from '$lib/history.js';
@@ -38,6 +39,30 @@
     ai.chats[path].scope = scope;
   }
 
+  // 답을 .md로 — 저장 위치는 사용자가 저장 대화상자에서 고른다(모델에게 경로를 맡기면 덮어쓰기 같은 판단을 자주
+  // 틀린다). 답을 만들 때 보낸 페이지 그림(imagePages)은 Rust ai_save_markdown이 옆에 JPEG로 저장해 링크한다
+  async function saveReply(path, m) {
+    const dir = path.replace(/[^/\\]*$/, '');
+    const base = path.slice(dir.length).replace(/\.[^.]*$/, '');
+    const out = await saveDialog({ defaultPath: `${dir}${base}-AI.md`, filters: [{ name: 'Markdown', extensions: ['md'] }] });
+    if (!out) return;
+    try {
+      await invoke('ai_save_markdown', { path: out, markdown: m.content, docPath: path, imagePages: m.imagePages ?? [] });
+      m.saved = out.replace(/^.*[/\\]/, '');
+      m.saveError = '';
+    } catch (e) {
+      m.saveError = String(e);
+    }
+  }
+
+  // :ai save — 지금 문서 대화의 마지막 답. 저장할 답이 없으면 false(호출부가 상태줄에 알린다)
+  export function saveLastReply(path) {
+    const m = ai.chats[path]?.messages.findLast((m) => m.role === 'assistant' && m.content);
+    if (!m || ai.busy) return false;
+    saveReply(path, m);
+    return true;
+  }
+
   export async function askAi(path, text) {
     text = text.trim();
     if (!text || ai.busy) return;
@@ -53,6 +78,7 @@
     const onEvent = new Channel();
     onEvent.onmessage = (m) => {
       if (m.notice) reply.notice = m.notice;
+      else if (m.image_pages) reply.imagePages = m.image_pages;
       else if (m.tool) { if (!reply.tools) reply.tools = []; reply.tools.push({ name: m.tool, args: m.args }); }
       else reply.content += m.delta;
     };
@@ -167,6 +193,12 @@
         {#if m.notice}<div class="ai-msg ai-notice">{t('ai.notice_' + m.notice)}</div>{/if}
         {#each m.tools ?? [] as tool, j (j)}<div class="ai-msg ai-tool">{toolLabel(tool)}</div>{/each}
         <div class="ai-msg ai-assistant" use:markdown={m.content}></div>
+        {#if m.content && !(ai.busy && i === chat.messages.length - 1)}
+          <div class="ai-actions">
+            <button onclick={() => saveReply(path, m)} title={t('ai.save_title')} tabindex="-1">{t('ai.save')}</button>
+            {#if m.saveError}<span class="ai-error">{m.saveError}</span>{:else if m.saved}<span>{t('ai.saved', { name: m.saved })}</span>{/if}
+          </div>
+        {/if}
       {/if}
     {/each}
     {#if ai.error || chat.error}<div class="ai-msg ai-error">{ai.error || chat.error}</div>{/if}
@@ -200,6 +232,9 @@
   /* +page.svelte의 .search-scope(검색 범위 표시)와 같은 모양 */
   .ai-scope { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 3px; background: rgba(58, 110, 168, 0.25); color: var(--sh-21); font-size: 0.75rem; }
   .ai-scope button { background: none; border: none; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; }
+  .ai-actions { display: flex; align-items: center; gap: 6px; margin-top: -4px; font-size: 0.72rem; color: var(--sh-15); }
+  .ai-actions button { background: none; border: 1px solid var(--sh-9); border-radius: 3px; color: var(--sh-18); cursor: pointer; font-size: 0.72rem; padding: 1px 6px; }
+  .ai-actions button:hover { color: var(--sh-21); }
   .ai-tool { font-size: 0.72rem; color: var(--sh-15); margin-bottom: -4px; }
   .ai-tool::before { content: '↳ '; }
   .ai-notice { font-size: 0.72rem; padding: 4px 6px; border-radius: 4px; border-left: 3px solid #f5a524; background: var(--sh-9); }

@@ -97,6 +97,9 @@ pub async fn ai_chat(
             if let Some(last) = messages.last_mut() {
                 last["images"] = json!(images);
             }
+            // 답을 마크다운으로 저장할 때(ai_save_markdown) 같은 페이지 그림을 함께 넣으려고 알려 둔다
+            let page = super::mcp::read_view().ok().and_then(|v| v["page"].as_u64()).unwrap_or(1);
+            send(json!({ "image_pages": [page] }))?;
         }
         messages.insert(0, json!({ "role": "system", "content": system }));
         let tools = if use_tools { tool_defs() } else { json!([]) };
@@ -127,6 +130,38 @@ pub async fn ai_chat(
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+// AI 답을 마크다운 파일로 — image_pages(답을 만들 때 모델에게 보낸 페이지 그림)는 같은 이름 옆에 JPEG로 저장하고
+// 맨 위에 링크로 넣는다. 그림은 MCP get_page_image와 같은 렌더링이라 모델이 본 그대로다.
+// ponytail: 그 사이 다른 문서로 옮겼으면 EPUB은 기본 레이아웃으로 열려 페이지가 어긋날 수 있다(mcp::open_doc 참고)
+#[tauri::command]
+pub async fn ai_save_markdown(path: String, markdown: String, doc_path: String, image_pages: Vec<u32>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || write_markdown(&path, &markdown, &doc_path, &image_pages))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+fn write_markdown(path: &str, markdown: &str, doc_path: &str, image_pages: &[u32]) -> Result<(), String> {
+    use base64::Engine;
+    let out = std::path::Path::new(path);
+    let stem = out.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_else(|| "ai".into());
+    let dir = out.parent().unwrap_or(std::path::Path::new("."));
+    let mut md = String::new();
+    if !image_pages.is_empty() {
+        let page_count = super::mcp::open_doc(doc_path)?.page_count().map_err(|e| e.to_string())? as usize;
+        for p in image_pages {
+            let content = super::mcp::page_images(doc_path, &p.to_string(), page_count, 1.5)?;
+            let data = content.iter().find_map(|c| c["data"].as_str()).ok_or("could not render the page image")?;
+            let name = format!("{stem}-p{p}.jpg");
+            let bytes = base64::engine::general_purpose::STANDARD.decode(data).map_err(|e| e.to_string())?;
+            std::fs::write(dir.join(&name), bytes).map_err(|e| e.to_string())?;
+            md += &format!("![p. {p}](<{name}>)\n\n"); // <>로 감싸야 파일 이름에 빈칸이 있어도 링크가 안 끊긴다
+        }
+    }
+    md += markdown;
+    md += "\n";
+    std::fs::write(out, md).map_err(|e| e.to_string())
 }
 
 // 한 번의 /api/chat 스트림 — 답 조각은 바로 패널로 흘려보내고, 모은 본문과 도구 호출을 돌려준다
@@ -488,6 +523,20 @@ mod tests {
         let count = mupdf::Document::open(path).unwrap().page_count().unwrap() as usize;
         let pages = split_pages(&crate::mcp::to_markdown(path, &format!("1-{count}"), count).unwrap());
         assert_eq!(pages.iter().map(|p| p.0 as usize).collect::<Vec<_>>(), (1..=count).collect::<Vec<_>>());
+    }
+
+    #[test]
+    fn saved_markdown_links_page_images_written_next_to_it() {
+        let dir = std::env::temp_dir().join(format!("vimong-ai-save-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let out = dir.join("my notes.md");
+        let doc = concat!(env!("CARGO_MANIFEST_DIR"), "/../testdata/synctex-demo.pdf");
+        write_markdown(out.to_str().unwrap(), "## 요약\n\n본문", doc, &[1]).unwrap();
+        let md = std::fs::read_to_string(&out).unwrap();
+        assert!(md.starts_with("![p. 1](<my notes-p1.jpg>)\n\n## 요약"), "{md}");
+        let jpg = std::fs::read(dir.join("my notes-p1.jpg")).unwrap();
+        assert_eq!(&jpg[..2], &[0xFF, 0xD8]); // JPEG
+        std::fs::remove_dir_all(&dir).unwrap();
     }
 
     #[test]

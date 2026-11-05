@@ -359,7 +359,7 @@ fn page_spec(args: &Value, view: &Value, default_all: bool) -> String {
     }
 }
 
-fn page_images(path: &str, spec: &str, page_count: usize, scale: f32) -> Result<Vec<Value>, String> {
+pub(crate) fn page_images(path: &str, spec: &str, page_count: usize, scale: f32) -> Result<Vec<Value>, String> {
     use base64::Engine;
     let pages = super::parse_page_spec(spec, page_count)?;
     if pages.len() > MAX_IMAGE_PAGES {
@@ -418,7 +418,7 @@ fn call_text_tool(name: &str, args: &Value, view: &Value, pages: &str) -> Result
 
 pub(crate) const PASSWORD_ERR: &str = "Password-protected documents are not supported";
 
-fn open_doc(path: &str) -> Result<mupdf::Document, String> {
+pub(crate) fn open_doc(path: &str) -> Result<mupdf::Document, String> {
     let mut doc = mupdf::Document::open(path).map_err(|e| e.to_string())?;
     if doc.needs_password().map_err(|e| e.to_string())? {
         return Err(PASSWORD_ERR.to_string());
