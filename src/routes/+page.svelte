@@ -14,7 +14,7 @@
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
   import SplitPane from '$lib/SplitPane.svelte';
-  import AiPanel, { askAi, setAiScope, saveLastReply } from '$lib/AiPanel.svelte';
+  import AiPanel, { askAi, setAiScope, saveLastReply, aiState, aiSettings, applyAiSettings, loadModels as loadAiModels, pullModel } from '$lib/AiPanel.svelte';
   import { createHistory } from '$lib/history.js';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
@@ -324,7 +324,38 @@
     if (!SYNCTEX_PRESETS[key]) return;
     settingsSynctexDraft = SYNCTEX_PRESETS[key];
   }
-  let settingsTab = $state('ui'); // 'ui' | 'markdown' | 'synctex'
+  let settingsTab = $state('ui'); // 'ui' | 'markdown' | 'synctex' | 'ai'
+  // 설정 > AI — 주소/기본 모델/기본 맥락은 다른 탭처럼 "적용" 때 저장하고, 목록 새로고침·모델 받기는 바로 실행한다
+  // (입력 중인 주소 기준이라 적용 전에 그 서버가 맞는지 확인해 볼 수 있다)
+  let settingsAiHostDraft = $state('');
+  let settingsAiModelDraft = $state('');
+  let settingsAiContextDraft = $state('page');
+  let aiPullName = $state('');
+  let aiPulling = $state(''); // 받는 중인 모델 이름 — 한 번에 하나만
+  let aiPullStatus = $state('');
+  async function openAiSettingsTab() {
+    settingsTab = 'ai';
+    await loadAiModels(settingsAiHostDraft);
+    if (!settingsAiModelDraft || !aiState.models?.includes(settingsAiModelDraft)) settingsAiModelDraft = aiState.models?.[0] ?? '';
+  }
+  async function pullAiModel(name) {
+    name = name.trim();
+    if (!name || aiPulling) return;
+    aiPulling = name;
+    aiPullStatus = t('settings.ai_pull_start', { name });
+    try {
+      await pullModel(name, settingsAiHostDraft, ({ status, completed, total }) => {
+        const pct = total ? ` ${Math.floor((completed ?? 0) / total * 100)}%` : '';
+        aiPullStatus = `${name}: ${status ?? ''}${pct}`;
+      });
+      aiPullStatus = t('settings.ai_pull_done', { name });
+      if (name === aiPullName.trim()) aiPullName = '';
+    } catch (e) {
+      aiPullStatus = t('settings.ai_pull_error', { name, e: String(e) });
+    } finally {
+      aiPulling = '';
+    }
+  }
   // 탭마다 내용 양이 달라서 크기를 콘텐츠에 맡기면 탭 전환할 때마다 모달이 커졌다 작아졌다
   // 한다 — CSS로 고정 크기를 주고, 네이티브 resize 핸들(모서리 드래그)로 사용자가 직접
   // 바꾼 크기만 기억해뒀다가 다음에 열 때 그대로 적용한다.
@@ -354,6 +385,8 @@
     settingsRestoreSessionDraft = restoreSession;
     settingsMdThemeDraft = mdTheme;
     settingsMdCodeFontDraft = mdCodeFont;
+    ({ host: settingsAiHostDraft, model: settingsAiModelDraft, context: settingsAiContextDraft } = aiSettings());
+    aiPullStatus = '';
     showSettings = true;
     ensureSystemFontsLoaded(); // 모달은 바로 뜨고, 폰트 목록은 준비되는 대로 select에 반영(반응형)
   }
@@ -376,6 +409,7 @@
     try { localStorage.setItem('vimong-md-theme', mdTheme); } catch (_) { /* skip */ }
     mdCodeFont = settingsMdCodeFontDraft;
     try { localStorage.setItem('vimong-md-code-font', mdCodeFont); } catch (_) { /* skip */ }
+    applyAiSettings({ host: settingsAiHostDraft, model: settingsAiModelDraft, context: settingsAiContextDraft });
     showSettings = false;
   }
 
@@ -8599,6 +8633,10 @@
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12a8 8 0 0 1 14-5.3M20 4v4h-4"/><path d="M20 12a8 8 0 0 1-14 5.3M4 20v-4h4"/></svg>
             <span>{t('settings.tab_synctex')}</span>
           </button>
+          <button tabindex="-1" class:tab-active={settingsTab === 'ai'} onclick={openAiSettingsTab}>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" /></svg>
+            <span>{t('settings.tab_ai')}</span>
+          </button>
         </div>
       </div>
       {#if settingsTab === 'ui'}
@@ -8678,6 +8716,46 @@
           <input id="settings-synctex" type="text" class="password-input"
             bind:value={settingsSynctexDraft} placeholder={t('settings.synctex_editor_placeholder')} />
           <span class="quit-desc">{t('settings.synctex_editor_hint')}</span>
+        </div>
+      {:else if settingsTab === 'ai'}
+        <div class="settings-row settings-row-col">
+          <label for="settings-ai-host">{t('settings.ai_host')}</label>
+          <div class="synctex-preset-row">
+            <input id="settings-ai-host" type="text" class="password-input" bind:value={settingsAiHostDraft} placeholder="http://127.0.0.1:11434"
+              onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); openAiSettingsTab(); } }} />
+            <button type="button" class="synctex-help-btn" onclick={openAiSettingsTab}>{t('settings.ai_refresh')}</button>
+          </div>
+          <span class="quit-desc">{aiState.error || t('settings.ai_host_hint')}</span>
+        </div>
+        <div class="settings-row">
+          <label for="settings-ai-model">{t('settings.ai_default_model')}</label>
+          <select id="settings-ai-model" bind:value={settingsAiModelDraft} disabled={!aiState.models?.length}>
+            {#each aiState.models ?? [] as m (m)}<option value={m}>{m}</option>{/each}
+          </select>
+        </div>
+        <div class="settings-row">
+          <label for="settings-ai-context">{t('settings.ai_default_context')}</label>
+          <select id="settings-ai-context" bind:value={settingsAiContextDraft}>
+            <option value="page">{t('ai.context_page')}</option>
+            <option value="doc">{t('ai.context_doc')}</option>
+            <option value="image">{t('ai.context_image')}</option>
+          </select>
+        </div>
+        <div class="settings-row settings-row-col">
+          <span>{t('settings.ai_models')}</span>
+          {#if aiState.models?.length === 0 && !aiState.error}<span class="quit-desc">{t('ai.no_models')}</span>{/if}
+          {#each aiState.models ?? [] as m (m)}
+            <div class="synctex-preset-row">
+              <span class="ai-model-name">{m}</span>
+              <button type="button" class="synctex-help-btn" disabled={!!aiPulling} onclick={() => pullAiModel(m)} title={t('settings.ai_update_title')}>{t('settings.ai_update')}</button>
+            </div>
+          {/each}
+          <div class="synctex-preset-row">
+            <input type="text" class="password-input" bind:value={aiPullName} placeholder={t('settings.ai_pull_placeholder')}
+              onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); pullAiModel(aiPullName); } }} />
+            <button type="button" class="synctex-help-btn" disabled={!!aiPulling || !aiPullName.trim()} onclick={() => pullAiModel(aiPullName)}>{t('settings.ai_pull')}</button>
+          </div>
+          {#if aiPullStatus}<span class="quit-desc">{aiPullStatus}</span>{/if}
         </div>
       {/if}
       <div class="quit-actions">
@@ -10363,7 +10441,8 @@
   }
   .settings-row-col { flex-direction: column; align-items: stretch; gap: 8px; }
   .synctex-preset-row { display: flex; align-items: center; gap: 10px; }
-  .synctex-preset-row select { flex: 1; }
+  .synctex-preset-row select, .synctex-preset-row input { flex: 1; }
+  .ai-model-name { flex: 1; font-family: ui-monospace, monospace; font-size: 0.8rem; }
   .synctex-help-btn {
     background: none; border: none; padding: 0; margin: 0;
     color: #7ab4e0; font-size: 0.82rem; text-decoration: underline; cursor: pointer; white-space: nowrap;

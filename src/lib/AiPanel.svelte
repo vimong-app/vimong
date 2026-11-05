@@ -7,8 +7,10 @@
   import DOMPurify from 'dompurify';
   import { createHistory } from '$lib/history.js';
 
+  // 기본 모델/맥락/Ollama 주소 — 설정 > AI(applyAiSettings)에서 정한다. 패널에서 고른 모델·맥락은 이번 실행 동안만
   const MODEL_KEY = 'vimong-ai-model';
   const CONTEXT_KEY = 'vimong-ai-context';
+  const HOST_KEY = 'vimong-ai-host';
   function load(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   function save(key, v) { try { localStorage.setItem(key, v); } catch (_) { /* skip */ } }
 
@@ -18,14 +20,41 @@
   // 기록이 한 대화에 섞이면 모델이 두 문서를 섞어 답한다. error(최상위)는 모델 목록/연결 오류.
   // context: 'page' | 'doc' | 'image' (Rust ai_chat 참고) — 예전에 있던 'none' 등 모르는 값이 저장돼 있으면 'page'로
   const savedContext = load(CONTEXT_KEY);
-  const ai = $state({ chats: {}, busy: false, error: '', models: null, model: load(MODEL_KEY) ?? '', context: ['page', 'doc', 'image'].includes(savedContext) ? savedContext : 'page' });
+  export const aiState = $state({ chats: {}, busy: false, error: '', models: null, model: load(MODEL_KEY) ?? '', context: ['page', 'doc', 'image'].includes(savedContext) ? savedContext : 'page' });
+  const ai = aiState;
+  // 첫 Ollama 호출보다 주소가 먼저 Rust에 들어가 있어야 한다 — 목록/질문은 이걸 기다린 뒤 부른다
+  const hostReady = invoke('ai_set_host', { host: load(HOST_KEY) ?? '' }).catch(() => {});
+
+  export function aiSettings() {
+    return { host: load(HOST_KEY) ?? '', model: load(MODEL_KEY) ?? ai.model, context: load(CONTEXT_KEY) ?? 'page' };
+  }
+
+  // 설정 창의 "적용" — 지금 패널도 기본값으로 되돌린다
+  export async function applyAiSettings({ host, model, context }) {
+    save(HOST_KEY, host.trim());
+    await invoke('ai_set_host', { host: host.trim() });
+    if (model) { save(MODEL_KEY, model); ai.model = model; }
+    save(CONTEXT_KEY, context);
+    ai.context = context;
+    await loadModels();
+  }
+
+  // 모델 받기/업데이트 — onProgress({ status, completed, total }). 끝나면 목록을 새로 받는다
+  export async function pullModel(name, host, onProgress) {
+    const onEvent = new Channel();
+    onEvent.onmessage = onProgress;
+    await invoke('ai_pull', { model: name, host: host || null, onEvent });
+    await loadModels(host);
+  }
   const NO_CHAT = { messages: [], error: '' };
   // 보낸 질문 기록 — 문서와 상관없이 하나(같은 질문을 다른 문서에 다시 묻는 일이 많다)
   const promptHistory = createHistory('vimong-ai-prompt-history', 50);
 
-  async function loadModels() {
+  // host: 설정 창에서 적용 전 주소로 목록을 볼 때(없으면 적용된 주소)
+  export async function loadModels(host = null) {
+    await hostReady;
     try {
-      ai.models = await invoke('ai_models');
+      ai.models = await invoke('ai_models', { host: host || null });
       ai.error = '';
       if (!ai.models.includes(ai.model)) ai.model = ai.models[0] ?? '';
     } catch (e) {
@@ -110,7 +139,7 @@
   const CODE_PREVIEW_LINES = 12; // 이보다 몇 줄 넘게 길면 접고 "… 전체 보기"를 단다
   let inputEl, listEl;
   onMount(() => {
-    if (ai.models === null) loadModels();
+    loadModels(); // 열 때마다 — 그 사이 ollama pull로 받은 모델도 바로 보이게
     inputEl.focus();
   });
 
@@ -218,10 +247,10 @@
 
 <div class="ai-panel" role="presentation" tabindex="-1" onkeydown={onPanelKeydown}>
   <div class="search-panel-header ai-header">
-    <select class="ai-input" bind:value={ai.model} onchange={() => save(MODEL_KEY, ai.model)} title={t('ai.model')} disabled={!ai.models?.length}>
+    <select class="ai-input" bind:value={ai.model} title={t('ai.model')} disabled={!ai.models?.length}>
       {#each ai.models ?? [] as m (m)}<option value={m}>{m}</option>{/each}
     </select>
-    <select class="ai-input" bind:value={ai.context} onchange={() => save(CONTEXT_KEY, ai.context)} title={chat.scope ? t('ai.context_scoped') : t('ai.context')} disabled={!!chat.scope}>
+    <select class="ai-input" bind:value={ai.context} title={chat.scope ? t('ai.context_scoped') : t('ai.context')} disabled={!!chat.scope}>
       <option value="page">{t('ai.context_page')}</option>
       <option value="doc">{t('ai.context_doc')}</option>
       <option value="image">{t('ai.context_image')}</option>

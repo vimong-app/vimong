@@ -25,12 +25,25 @@ const CHUNK_CHARS: usize = 8_000; // 나눠 읽을 때 한 번에 읽히는 분�
 const OUTLINE_CHARS: usize = 8_000; // 범위를 고를 때 보여주는 목차 분량 — 넘치면 상위 두 단계만
 
 static STOP: AtomicBool = AtomicBool::new(false);
+// 설정 > AI의 Ollama 주소(ai_set_host) — 비어 있으면 OLLAMA_HOST, 그것도 없으면 로컬 기본 포트
+static HOST: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
-// ponytail: 주소는 OLLAMA_HOST(없으면 로컬 기본 포트)만 본다 — 원격/https 서버가 필요해지면 설정으로 뺀다
+#[tauri::command]
+pub fn ai_set_host(host: String) {
+    *HOST.lock().unwrap() = host;
+}
+
 fn base_url() -> String {
-    match std::env::var("OLLAMA_HOST") {
-        Ok(h) if h.starts_with("http") => h,
-        Ok(h) if !h.is_empty() => format!("http://{h}"),
+    base_url_for(None)
+}
+
+// host: 설정 창에서 아직 적용 전인 주소로 목록/받기를 해 볼 때. ponytail: ureq를 TLS 없이 넣어서 http만 된다
+fn base_url_for(host: Option<&str>) -> String {
+    let set = HOST.lock().unwrap().clone();
+    let h = host.map(str::to_string).filter(|h| !h.trim().is_empty()).or((!set.trim().is_empty()).then_some(set));
+    match h.or_else(|| std::env::var("OLLAMA_HOST").ok()).map(|h| h.trim().trim_end_matches('/').to_string()) {
+        Some(h) if h.starts_with("http") => h,
+        Some(h) if !h.is_empty() => format!("http://{h}"),
         _ => "http://127.0.0.1:11434".into(),
     }
 }
@@ -47,14 +60,34 @@ fn http_err(e: ureq::Error) -> String {
 }
 
 #[tauri::command]
-pub async fn ai_models() -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(|| {
-        let tags: Value = ureq::get(&format!("{}/api/tags", base_url()))
+pub async fn ai_models(host: Option<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let tags: Value = ureq::get(&format!("{}/api/tags", base_url_for(host.as_deref())))
             .call()
             .map_err(http_err)?
             .into_json()
             .map_err(|e| e.to_string())?;
         Ok(tags["models"].as_array().into_iter().flatten().filter_map(|m| m["name"].as_str().map(String::from)).collect())
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+// 모델 받기/업데이트(ollama pull) — 같은 이름이면 바뀐 레이어만 받는다. 진행은 {status, completed, total}로
+#[tauri::command]
+pub async fn ai_pull(model: String, host: Option<String>, on_event: Channel<Value>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let resp = ureq::post(&format!("{}/api/pull", base_url_for(host.as_deref())))
+            .send_json(json!({ "model": model.trim(), "stream": true }))
+            .map_err(http_err)?;
+        for line in std::io::BufReader::new(resp.into_reader()).lines() {
+            let v: Value = serde_json::from_str(&line.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            if let Some(err) = v["error"].as_str() {
+                return Err(err.to_string());
+            }
+            on_event.send(json!({ "status": v["status"], "completed": v["completed"], "total": v["total"] })).map_err(|e| e.to_string())?;
+        }
+        Ok(())
     })
     .await
     .map_err(|e| e.to_string())?
@@ -574,6 +607,12 @@ mod tests {
         assert_eq!(unwrap_markdown_fence(plain), plain);
         let two = "```markdown\na\n```\n```markdown\nb\n```";
         assert_eq!(unwrap_markdown_fence(two), two);
+    }
+
+    #[test]
+    fn host_setting_overrides_env_and_gets_a_scheme() {
+        assert_eq!(base_url_for(Some("192.168.0.5:11434/")), "http://192.168.0.5:11434");
+        assert_eq!(base_url_for(Some("http://gpu-box:11434")), "http://gpu-box:11434");
     }
 
     #[test]
