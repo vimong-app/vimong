@@ -159,9 +159,32 @@ fn write_markdown(path: &str, markdown: &str, doc_path: &str, image_pages: &[u32
             md += &format!("![p. {p}](<{name}>)\n\n"); // <>로 감싸야 파일 이름에 빈칸이 있어도 링크가 안 끊긴다
         }
     }
-    md += markdown;
+    md += unwrap_markdown_fence(markdown);
     md += "\n";
     std::fs::write(out, md).map_err(|e| e.to_string())
+}
+
+// "마크다운으로 저장해줘"에 모델은 흔히 문서 전체를 ```markdown … ``` 으로 감싸 보여준다 — 그대로 저장하면 펜스까지
+// 파일에 들어가니, markdown/md 펜스가 하나 있으면 그 안만 꺼낸다. 다른 언어 코드 블록은 문서의 일부라 그대로 둔다.
+// 모델이 안쪽 코드 블록도 같은 ``` 로 감싸는 일이 잦아서(CommonMark로는 거기서 닫힌다) 마지막 닫는 펜스까지를 안으로 본다.
+fn unwrap_markdown_fence(text: &str) -> &str {
+    let lines: Vec<(usize, &str)> = text.split_inclusive('\n').scan(0, |pos, l| { let start = *pos; *pos += l.len(); Some((start, l)) }).collect();
+    let fence = |l: &str| {
+        let t = l.trim();
+        let marker = t.chars().next().filter(|c| *c == '`' || *c == '~')?;
+        let n = t.chars().take_while(|c| *c == marker).count();
+        (n >= 3).then(|| (marker, n, t[n..].trim().to_ascii_lowercase()))
+    };
+    let opens: Vec<usize> = lines.iter().enumerate().filter(|(_, (_, l))| fence(l).is_some_and(|(_, _, lang)| lang == "markdown" || lang == "md")).map(|(i, _)| i).collect();
+    let [open] = opens[..] else { return text };
+    let (marker, n, _) = fence(lines[open].1).unwrap();
+    let body_start = lines.get(open + 1).map_or(text.len(), |l| l.0);
+    let close = lines[open + 1..].iter().rposition(|(_, l)| fence(l).is_some_and(|(m, k, lang)| m == marker && k >= n && lang.is_empty()));
+    match close {
+        Some(c) => &text[body_start..lines[open + 1 + c].0],
+        None => &text[body_start..], // 답이 중간에 끊겨 닫는 펜스가 없을 때
+    }
+    .trim_end()
 }
 
 // 한 번의 /api/chat 스트림 — 답 조각은 바로 패널로 흘려보내고, 모은 본문과 도구 호출을 돌려준다
@@ -537,6 +560,20 @@ mod tests {
         let jpg = std::fs::read(dir.join("my notes-p1.jpg")).unwrap();
         assert_eq!(&jpg[..2], &[0xFF, 0xD8]); // JPEG
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn markdown_fence_around_the_document_is_dropped_but_inner_code_kept() {
+        // 앞뒤 설명 + 문서 전체를 감싼 펜스 — 안쪽 코드 블록도 같은 ``` 로 감싸져 있다
+        let reply = "요약입니다.\n\n```markdown\n# 제6장\n\n```tex\n\\def\\a{b}\n```\n\n끝\n```\n\n필요하면 말씀하세요.";
+        assert_eq!(unwrap_markdown_fence(reply), "# 제6장\n\n```tex\n\\def\\a{b}\n```\n\n끝");
+        assert_eq!(unwrap_markdown_fence("```md\n# A\n"), "# A"); // 닫는 펜스 없이 끊긴 답
+        assert_eq!(unwrap_markdown_fence("~~~~markdown\n# A\n~~~~\n"), "# A");
+        // markdown 펜스가 없거나 둘 이상이면 손대지 않는다
+        let plain = "# A\n\n```python\nprint(1)\n```";
+        assert_eq!(unwrap_markdown_fence(plain), plain);
+        let two = "```markdown\na\n```\n```markdown\nb\n```";
+        assert_eq!(unwrap_markdown_fence(two), two);
     }
 
     #[test]
