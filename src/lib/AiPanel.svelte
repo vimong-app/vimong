@@ -2,6 +2,7 @@
   import { invoke, Channel } from '@tauri-apps/api/core';
   import { openUrl } from '@tauri-apps/plugin-opener';
   import { save as saveDialog } from '@tauri-apps/plugin-dialog';
+  import { writeText as clipboardWrite } from '@tauri-apps/plugin-clipboard-manager';
   import { marked } from 'marked';
   import DOMPurify from 'dompurify';
   import { createHistory } from '$lib/history.js';
@@ -102,6 +103,11 @@
   let { t, path, onExit } = $props();
   const chat = $derived(ai.chats[path] ?? NO_CHAT);
   let input = $state('');
+  // 긴 코드 블록 전체 보기 — { html, code, lines } | null. 사이드바가 좁아 앱 전체 위에 띄운다
+  let codeView = $state(null);
+  let codeViewEl = $state(null);
+  let copied = $state(false);
+  const CODE_PREVIEW_LINES = 12; // 이보다 몇 줄 넘게 길면 접고 "… 전체 보기"를 단다
   let inputEl, listEl;
   onMount(() => {
     if (ai.models === null) loadModels();
@@ -116,6 +122,16 @@
   // 문서 전체 keydown 리스너(+page.svelte)는 .ai-input에 포커스가 있으면 손대지 않는다 — Esc만
   // 여기서 처리하고 전파를 끊는다(안 끊으면 포커스가 빠진 뒤 그 리스너가 같은 Esc로 검색 결과 등을 지운다).
   function onPanelKeydown(e) {
+    if (codeView) {
+      // 코드 창: j/k 스크롤, Esc 닫기 — 창 자체가 .ai-input이라 문서 쪽 vim 키로 새지 않는다
+      if (e.key === 'j' || e.key === 'k') { e.preventDefault(); codeViewEl?.scrollBy(0, e.key === 'j' ? 40 : -40); return; }
+      if (e.key !== 'Escape') return;
+      e.preventDefault();
+      e.stopPropagation();
+      codeView = null;
+      inputEl?.focus();
+      return;
+    }
     if (e.key !== 'Escape') return;
     e.preventDefault();
     e.stopPropagation();
@@ -156,9 +172,39 @@
   // {@html}이 첫 렌더링을 건너뛰어, 첫 토큰이 올 때까지 이전 답이 그대로 보였다(MutationObserver로 확인. 따로 띄운
   // WebKit/happy-dom에서는 재현이 안 돼 Svelte 쪽 원인은 못 찾았다). 만들 때와 바뀔 때마다 덮어쓰면 처음 상태와 상관없다.
   function markdown(node, src) {
-    const render = (s) => { node.innerHTML = DOMPurify.sanitize(marked.parse(s || '…')); };
+    const render = (s) => {
+      node.innerHTML = DOMPurify.sanitize(marked.parse(s || '…'));
+      // 긴 코드 블록은 앞부분만 보이게 접고(CSS로 높이만 줄여 하이라이트는 그대로) 전체 보기 버튼을 단다 — 답이 자랄
+      // 때마다 다시 그려지니 매번 다시 단다
+      for (const pre of node.querySelectorAll('pre')) {
+        const code = pre.textContent.replace(/\n$/, '');
+        const lines = code.split('\n').length;
+        if (lines <= CODE_PREVIEW_LINES + 3) continue; // 몇 줄 더 긴 정도면 접는 게 더 번거롭다
+        pre.classList.add('ai-code-collapsed');
+        const more = document.createElement('button');
+        more.className = 'ai-code-more';
+        more.tabIndex = -1;
+        more.textContent = t('ai.code_more', { n: lines });
+        more.onclick = () => { codeView = { html: pre.innerHTML, code, lines }; copied = false; };
+        pre.after(more);
+      }
+    };
     render(src);
     return { update: render };
+  }
+
+  function setHtml(node, html) {
+    node.innerHTML = html; // markdown()에서 이미 DOMPurify를 거친 HTML
+    return { update: (h) => { node.innerHTML = h; } };
+  }
+
+  function focusOnMount(node) {
+    node.focus();
+  }
+
+  async function copyCode() {
+    await clipboardWrite(codeView.code);
+    copied = true;
   }
 
   // 답 안의 링크를 그대로 따라가면 앱 webview 자체가 그 페이지로 넘어가 버린다 — 브라우저로 연다
@@ -203,6 +249,19 @@
     {/each}
     {#if ai.error || chat.error}<div class="ai-msg ai-error">{ai.error || chat.error}</div>{/if}
   </div>
+  {#if codeView}
+    <!-- 패널 안에 두어야 Esc/j/k가 onPanelKeydown으로 온다. position: fixed라 화면은 앱 전체를 덮는다 -->
+    <div class="ai-code-overlay" role="presentation" onclick={(e) => { if (e.target === e.currentTarget) { codeView = null; inputEl?.focus(); } }}>
+      <div class="ai-code-dialog ai-input" role="dialog" aria-modal="true" aria-label={t('ai.code_title', { n: codeView.lines })} tabindex="-1" use:focusOnMount>
+        <div class="ai-code-head">
+          <span>{t('ai.code_title', { n: codeView.lines })}</span>
+          <button onclick={copyCode} tabindex="-1">{copied ? t('ai.copied') : t('ai.copy')}</button>
+          <button onclick={() => { codeView = null; inputEl?.focus(); }} title={t('ai.close')} tabindex="-1">✕</button>
+        </div>
+        <pre class="hljs" bind:this={codeViewEl} use:setHtml={codeView.html}></pre>
+      </div>
+    </div>
+  {/if}
   {#if chat.scope}
     <div class="ai-scope">
       <span>{chat.scope.title ? t('ai.scope_title', { title: chat.scope.title, spec: chat.scope.spec }) : t('ai.scope', { spec: chat.scope.spec })}</span>
@@ -232,6 +291,21 @@
   /* +page.svelte의 .search-scope(검색 범위 표시)와 같은 모양 */
   .ai-scope { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 3px; background: rgba(58, 110, 168, 0.25); color: var(--sh-21); font-size: 0.75rem; }
   .ai-scope button { background: none; border: none; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; }
+  .ai-assistant :global(pre.ai-code-collapsed) {
+    max-height: calc(12 * 1.45em);
+    overflow: hidden;
+    -webkit-mask-image: linear-gradient(to bottom, #000 70%, transparent);
+    mask-image: linear-gradient(to bottom, #000 70%, transparent);
+  }
+  .ai-assistant :global(.ai-code-more) { display: block; margin: -2px 0 6px; background: none; border: none; padding: 0; color: var(--sh-18); cursor: pointer; font-size: 0.72rem; }
+  .ai-assistant :global(.ai-code-more:hover) { color: var(--sh-21); text-decoration: underline; }
+  .ai-code-overlay { position: fixed; inset: 0; z-index: 1000; display: flex; align-items: center; justify-content: center; background: rgba(0, 0, 0, 0.45); }
+  .ai-code-dialog { outline: none; display: flex; flex-direction: column; width: min(900px, 90vw); height: min(80vh, 900px); border-radius: 8px; background: var(--sh-4); box-shadow: 0 10px 40px rgba(0, 0, 0, 0.4); }
+  .ai-code-head { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-bottom: 1px solid var(--sh-9); font-size: 0.8rem; }
+  .ai-code-head span { flex: 1; }
+  .ai-code-head button { background: none; border: 1px solid var(--sh-9); border-radius: 3px; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; padding: 2px 8px; }
+  .ai-code-head button:hover { color: var(--sh-21); }
+  .ai-code-dialog pre { flex: 1; min-height: 0; margin: 0; padding: 12px; overflow: auto; font-size: 0.8rem; line-height: 1.45; }
   .ai-actions { display: flex; align-items: center; gap: 6px; margin-top: -4px; font-size: 0.72rem; color: var(--sh-15); }
   .ai-actions button { background: none; border: 1px solid var(--sh-9); border-radius: 3px; color: var(--sh-18); cursor: pointer; font-size: 0.72rem; padding: 1px 6px; }
   .ai-actions button:hover { color: var(--sh-21); }
