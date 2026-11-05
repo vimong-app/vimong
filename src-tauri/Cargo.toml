@@ -50,6 +50,8 @@ image = { version = "0.25", default-features = false, features = ["jpeg"] }
 # 마크다운 코드 폰트 설정에서 시스템에 실제 설치된 폰트 목록을 보여주려고 — 플랫폼별로
 # CoreText(macOS)/DirectWrite(Windows)/fontconfig(Linux)를 알아서 골라 쓴다.
 font-kit = "0.14"
+# 앱 안 AI 패널(ai.rs)이 로컬 Ollama HTTP API를 부를 때 — localhost만 보니 TLS는 뺀다
+ureq = { version = "2", default-features = false, features = ["json"] }
 
 # 텍스트 레이어가 없는 스캔 이미지 PDF에서 Vision OCR로 텍스트 선택을 지원 — macOS 전용
 # (Windows/Linux는 나중에 별도 엔진으로)

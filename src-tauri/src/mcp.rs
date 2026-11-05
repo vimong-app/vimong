@@ -147,7 +147,7 @@ fn handle(method: &str, params: &Value) -> Result<Value, String> {
 }
 
 // ponytail: 앱이 비정상 종료하면 current_view.json이 남아 오래된 상태를 돌려준다 — 문제되면 pid를 같이 기록해 살아있는지 확인
-fn read_view() -> Result<Value, String> {
+pub(crate) fn read_view() -> Result<Value, String> {
     let no_view = || "No document is open in Vimong (or Vimong is not running).".to_string();
     let text = current_view_path().and_then(|p| std::fs::read_to_string(p).ok()).ok_or_else(no_view)?;
     serde_json::from_str(&text).map_err(|_| no_view())
@@ -159,7 +159,7 @@ const MAX_TEXT_CHARS: usize = 100_000;
 const MAX_IMAGE_PAGES: usize = 5; // 페이지 이미지는 한 장에 수백 KB라 한 번에 너무 많이 보내지 않는다
 
 // 결과는 MCP content 배열 — 대부분 텍스트 하나, get_page_image만 이미지 여러 개
-fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
+pub(crate) fn call_tool(name: &str, args: &Value) -> Result<Vec<Value>, String> {
     const TOOLS: [&str; 11] = [
         "get_current_view", "save_pages", "save_markdown", "get_page_text", "get_notes", "get_outline",
         "get_selection", "get_page_image", "goto_page", "add_highlight", "search_text",
@@ -416,10 +416,17 @@ fn call_text_tool(name: &str, args: &Value, view: &Value, pages: &str) -> Result
     }
 }
 
+pub(crate) const PASSWORD_ERR: &str = "Password-protected documents are not supported";
+
 fn open_doc(path: &str) -> Result<mupdf::Document, String> {
-    let doc = mupdf::Document::open(path).map_err(|e| e.to_string())?;
+    let mut doc = mupdf::Document::open(path).map_err(|e| e.to_string())?;
     if doc.needs_password().map_err(|e| e.to_string())? {
-        return Err("Password-protected documents are not supported".to_string());
+        return Err(PASSWORD_ERR.to_string());
+    }
+    // EPUB 등 재배치 문서는 앱이 자기 레이아웃(set_reflow_font_size)으로 페이지를 나눈다 — 그대로
+    // 열면 MuPDF 기본 레이아웃이라 페이지 번호가 화면과 어긋난다
+    if let Some(em) = read_view().ok().filter(|v| v["path"] == path).and_then(|v| v["reflow_em"].as_f64()) {
+        doc.layout(super::REFLOW_WIDTH, super::REFLOW_HEIGHT, em as f32).map_err(|e| e.to_string())?;
     }
     Ok(doc)
 }

@@ -14,6 +14,8 @@
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
   import SplitPane from '$lib/SplitPane.svelte';
+  import AiPanel, { askAi } from '$lib/AiPanel.svelte';
+  import { createHistory } from '$lib/history.js';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
   const SUPPORTED_EXTENSIONS = ['pdf', 'xps', 'epub', 'cbz', 'svg', 'docx', 'xlsx', 'pptx', 'png', 'gif', 'jpg', 'jpeg', 'bmp', 'tif', 'tiff'];
@@ -463,6 +465,7 @@
   $effect(() => {
     invoke('set_current_view', {
       path: hwpMode ? '' : filePath, page: currentPage + 1, pageCount, selection: selection ? selectionText() : '',
+      reflowEm: epubReflowable ? epubFontSize : null, // MCP가 같은 레이아웃으로 열어야 페이지 번호가 맞는다
     });
   });
 
@@ -3102,7 +3105,7 @@
 
   // ── Table of contents ────────────────────────────────────────
   let toc = $state([]);              // { title, page, children }[] (nested)
-  let sidebarView = $state('thumbs'); // 'thumbs' | 'toc' | 'search' | 'notes' | 'layers'
+  let sidebarView = $state('thumbs'); // 'thumbs' | 'toc' | 'search' | 'notes' | 'layers' | 'attachments' | 'ai'
 
   // ── Optional content (OCG, Acrobat의 "레이어" 패널과 같은 개념) ──────────
   // 대부분의 PDF엔 없어서 빈 배열이면 사이드바 탭 자체를 숨긴다(disabled로만 두지 않음).
@@ -3161,7 +3164,7 @@
   let cmdInput = $state('');
 
   // execCommand이 인식하는 명령어 이름 전체 — Tab 자동완성 후보 목록.
-  const COMMAND_NAMES = ['q', 'split', 'sp', 'vsplit', 'vs', 'only', 'close', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm'];
+  const COMMAND_NAMES = ['q', 'split', 'sp', 'vsplit', 'vs', 'only', 'close', 'tabclose', 'tabc', 'tabnew', 'tabe', 'tabonly', 'tabo', 'tabmove', 'tabm', 'tabreopen', 'tabre', 'e', 'w', 'export', 'images', 'nohlsearch', 'noh', 'docinfo', 'print', 'p', 'font', 'set', 'settings', 'cmd', 'oss', 'google', 'g', 'md', 'view', 'attachments', 'att', 'marks', 'delmarks', 'delm', 'ai'];
   const PATH_ARG_COMMANDS = ['e', 'w', 'export']; // 인자로 경로를 받는 명령 — 여기만 경로 자동완성 대상
   const MD_SUBCOMMANDS = ['code', 'preview', 'split', 'theme']; // :md 서브명령 Tab 자동완성 후보
   const SET_OPTIONS = ['invert', 'noinvert', 'invert!', 'lang=']; // :set 옵션 Tab 자동완성 후보 (execCommand의 :set 분기와 맞출 것)
@@ -3328,35 +3331,6 @@
     cmdInput = cmdCompletion.prefix + cmdCompletion.candidates[0];
   }
 
-  // : 명령 / 검색어 기록 — vim처럼 localStorage에 저장해서 앱을 재시작해도 남고,
-  // ↑/↓로 훑어본다. 두 입력창(명령/검색)이 완전히 같은 동작이라 하나로 묶어서 공유한다.
-  function createHistory(key, max) {
-    let list;
-    try { list = JSON.parse(localStorage.getItem(key)) ?? []; } catch (_) { list = []; }
-    let idx = -1;   // -1: 기록을 훑어보는 중이 아니라 직접 입력 중
-    let draft = ''; // ↑로 훑어보기 시작하기 직전 입력 — ↓로 끝까지 내려오면 복원
-    return {
-      push(entry) {
-        if (!entry.trim() || list[list.length - 1] === entry) return;
-        list.push(entry);
-        if (list.length > max) list.shift();
-        localStorage.setItem(key, JSON.stringify(list));
-        idx = -1;
-      },
-      up(current) {
-        if (list.length === 0) return current;
-        if (idx === -1) { draft = current; idx = list.length - 1; }
-        else if (idx > 0) idx--;
-        return list[idx];
-      },
-      down(current) {
-        if (idx === -1) return current;
-        if (idx < list.length - 1) { idx++; return list[idx]; }
-        idx = -1;
-        return draft;
-      },
-    };
-  }
   const cmdHistory = createHistory('vimong-cmd-history', 50);
   const searchHistory = createHistory('vimong-search-history', 50);
   let searchQuery = $state('');
@@ -5312,6 +5286,7 @@
       if (key === 'Escape') { document.activeElement.blur(); e.preventDefault(); }
       return;
     }
+    if (document.activeElement?.classList?.contains('ai-input')) return; // AI 패널 입력창 — Esc는 AiPanel이 직접 처리
 
     // ── 앱 메뉴(목차 우클릭 메뉴)가 떠 있으면 j/k·↑/↓로 이동, Enter/Space 실행, Esc 닫기. 다른 키는 삼킨다 ──
     if (appMenu) {
@@ -6017,6 +5992,8 @@
       await refreshPageBitmap(currentPage);
     } else if (key === 'H' && selection) {
       await addHighlightToSelection();
+    } else if (key === 'a') {
+      await openAiPanel();
     } else if (key === 'u') {
       await undoLastAnnotation();
     } else if (key === 'p') {
@@ -6294,6 +6271,9 @@
       focusNearestItem(layersResultEls, 0);
     } else if (sidebarView === 'attachments') {
       focusNearestItem(attachmentsResultEls, 0);
+    } else if (sidebarView === 'ai') {
+      // 입력창이 아니라 패널 자체에 — 입력창이면 [/]가 글자로 들어가 다음 탭으로 못 넘어간다. 입력은 a로
+      document.querySelector('.ai-panel')?.focus();
     }
   }
 
@@ -6332,8 +6312,8 @@
   async function cycleSidebarView(dir) {
     if (pageCount === 0) return;
     const views = mdMode
-      ? ['toc', 'search'].filter(v => v !== 'toc' || toc.length > 0)
-      : ['thumbs', 'toc', 'search', 'notes', 'layers', 'attachments'].filter(v =>
+      ? ['toc', 'search', 'ai'].filter(v => v !== 'toc' || toc.length > 0)
+      : ['thumbs', 'toc', 'search', 'notes', 'layers', 'attachments', 'ai'].filter(v =>
           (v !== 'toc' || toc.length > 0) && (v !== 'layers' || layers.length > 0) &&
           (v !== 'attachments' || attachments.length > 0));
     const idx = views.indexOf(sidebarView);
@@ -6363,6 +6343,19 @@
   // 바꾸면, 이전 탭의 포커스된 항목이 통째로 사라지면서 포커스가 본문으로 튕겨나가던
   // 문제가 있었다. 원래 사이드바에 포커스가 있었을 때만 새 탭의 해당 항목으로 옮겨준다
   // (그냥 클릭으로 탭만 훑어보는 중이면 포커스를 강제로 뺏지 않는다).
+  // a / :ai [질문] — 사이드바 AI 탭(AiPanel)을 연다. 선택한 텍스트와 지금 페이지는 Rust ai_chat이
+  // set_current_view 기록(MCP와 같은 것)에서 읽어 맥락으로 붙이니 여기서 넘길 건 없다.
+  // 프레젠테이션 중엔 사이드바가 CSS로만 숨겨져 입력창에 포커스가 안 가서 막는다(focusSearchTab 참고).
+  async function openAiPanel(question = '') {
+    if (pageCount === 0) return;
+    if (presentationMode) { statusMsg = t('status.presentation_unsupported_feature'); return; }
+    sidebarVisible = true;
+    sidebarView = 'ai';
+    await tick();
+    document.querySelector('.ai-textarea')?.focus(); // 이미 떠 있던 패널이면 onMount가 다시 안 돈다
+    if (question.trim()) askAi(filePath, question); // 답은 패널에 스트리밍된다 — 기다리지 않는다
+  }
+
   async function switchSidebarView(view) {
     const wasInSidebar = isFocusInSidebar();
     sidebarView = view;
@@ -7038,6 +7031,8 @@
       await loadDocInfo();
     } else if (cmd === 'print' || cmd === 'p') {
       await printDocument();
+    } else if (cmd === 'ai' || cmd.startsWith('ai ')) {
+      await openAiPanel(cmd.slice(3));
     } else if (cmd === 'images') {
       await exportPageImages();
     } else if (cmd.startsWith('md ')) {
@@ -7528,6 +7523,17 @@
           </svg>
         </button>
         {/if}
+        <button
+          class="sidebar-tab-btn"
+          class:active={sidebarView === 'ai'}
+          onclick={() => openAiPanel()}
+          title={t('sidebar.ai')}
+          tabindex="-1"
+        >
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z" /><path d="M19 16l.8 2.2L22 19l-2.2.8L19 22l-.8-2.2L16 19l2.2-.8z" />
+          </svg>
+        </button>
       </div>
 
       <div class="sidebar-content">
@@ -7662,6 +7668,8 @@
               <span class="note-snippet">{name}</span>
             </div>
           {/each}
+        {:else if sidebarView === 'ai'}
+          <AiPanel {t} path={filePath} onExit={() => mainEl?.focus()} />
         {:else if sidebarView === 'toc'}
           {#each flatToc as item, i (item.id)}
             <div
@@ -8267,6 +8275,7 @@
               <tr><td>f{'{c}'} / F{'{c}'} ; ,</td><td>{t('shortcuts.nav.find_char')}</td></tr>
               <tr><td>s</td><td>{t('shortcuts.nav.line_hint')}</td></tr>
               <tr><td>H</td><td>{t('shortcuts.nav.highlight')}</td></tr>
+              <tr><td>a</td><td>{t('shortcuts.nav.ai')}</td></tr>
               <tr><td>u / ⌘Z</td><td>{t('shortcuts.nav.undo_highlight')}</td></tr>
               <tr><td>{t('shortcuts.nav.synctex_key')}</td><td>{t('shortcuts.nav.synctex')}</td></tr>
               <tr><td>[ / ]</td><td>{t('shortcuts.nav.sidebar_tab')}</td></tr>
@@ -8395,6 +8404,7 @@
               <tr><td>:view {'{mode}'}</td><td>{t('commands.file.view')}</td></tr>
               <tr><td>:font</td><td>{t('commands.file.font')}</td></tr>
               <tr><td>:google [text] / :g [text]</td><td>{t('commands.file.google')}</td></tr>
+              <tr><td>:ai [question]</td><td>{t('commands.file.ai')}</td></tr>
               <tr><td>:set / :settings</td><td>{t('shortcuts.file.settings')}</td></tr>
               <tr><td>:set lang={'{code}'}</td><td>{t('commands.file.set_lang')}</td></tr>
               <tr><td>:?</td><td>{t('shortcuts.file.open_help')}</td></tr>

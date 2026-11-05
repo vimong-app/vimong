@@ -1,0 +1,177 @@
+<script module>
+  import { invoke, Channel } from '@tauri-apps/api/core';
+  import { openUrl } from '@tauri-apps/plugin-opener';
+  import { marked } from 'marked';
+  import DOMPurify from 'dompurify';
+  import { createHistory } from '$lib/history.js';
+
+  const MODEL_KEY = 'vimong-ai-model';
+  const CONTEXT_KEY = 'vimong-ai-context';
+  function load(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
+  function save(key, v) { try { localStorage.setItem(key, v); } catch (_) { /* skip */ } }
+
+  // 사이드바 탭을 바꾸거나 숨기면 패널이 언마운트되니 대화는 모듈 수준에 둔다 — :ai <질문>이
+  // 패널이 그려지기 전에 askAi를 불러도 같은 상태에 쌓인다.
+  // chats: 파일 경로 → { messages, error } — 맥락은 늘 지금 보고 있는 문서라, 다른 문서와 주고받은
+  // 기록이 한 대화에 섞이면 모델이 두 문서를 섞어 답한다. error(최상위)는 모델 목록/연결 오류.
+  // context: 'page' | 'doc' | 'image' (Rust ai_chat 참고) — 예전에 있던 'none' 등 모르는 값이 저장돼 있으면 'page'로
+  const savedContext = load(CONTEXT_KEY);
+  const ai = $state({ chats: {}, busy: false, error: '', models: null, model: load(MODEL_KEY) ?? '', context: ['page', 'doc', 'image'].includes(savedContext) ? savedContext : 'page' });
+  const NO_CHAT = { messages: [], error: '' };
+  // 보낸 질문 기록 — 문서와 상관없이 하나(같은 질문을 다른 문서에 다시 묻는 일이 많다)
+  const promptHistory = createHistory('vimong-ai-prompt-history', 50);
+
+  async function loadModels() {
+    try {
+      ai.models = await invoke('ai_models');
+      ai.error = '';
+      if (!ai.models.includes(ai.model)) ai.model = ai.models[0] ?? '';
+    } catch (e) {
+      ai.models = [];
+      ai.error = String(e);
+    }
+  }
+
+  export async function askAi(path, text) {
+    text = text.trim();
+    if (!text || ai.busy) return;
+    if (!ai.model) await loadModels();
+    if (!ai.model) return; // 패널이 "모델 없음"/연결 오류 안내를 보여준다
+    promptHistory.push(text);
+    ai.chats[path] ??= { messages: [], error: '' };
+    const chat = ai.chats[path]; // ??=의 결과값은 프록시가 아닌 원본 객체라 다시 읽는다
+    chat.messages.push({ role: 'user', content: text });
+    const history = chat.messages.map(({ role, content }) => ({ role, content })); // notice는 화면용이라 모델엔 안 보낸다
+    chat.messages.push({ role: 'assistant', content: '' });
+    const reply = chat.messages[chat.messages.length - 1];
+    const onEvent = new Channel();
+    onEvent.onmessage = (m) => { if (m.notice) reply.notice = m.notice; else reply.content += m.delta; };
+    ai.busy = true;
+    chat.error = '';
+    try {
+      await invoke('ai_chat', { model: ai.model, messages: history, context: ai.context, onEvent });
+    } catch (e) {
+      chat.error = String(e);
+      if (!reply.content) chat.messages.pop();
+    } finally {
+      ai.busy = false;
+    }
+  }
+</script>
+
+<script>
+  import { onMount, tick } from 'svelte';
+
+  // path: 지금 문서 — 이 문서의 대화만 보여준다. onExit: Esc로 입력창을 떠날 때 본문으로 포커스를 돌려주는 콜백
+  let { t, path, onExit } = $props();
+  const chat = $derived(ai.chats[path] ?? NO_CHAT);
+  let input = $state('');
+  let inputEl, listEl;
+  onMount(() => {
+    if (ai.models === null) loadModels();
+    inputEl.focus();
+  });
+
+  $effect(() => {
+    chat.messages.length; chat.messages.at(-1)?.content; chat.error; // 답이 자랄 때마다 맨 아래로
+    tick().then(() => { if (listEl) listEl.scrollTop = listEl.scrollHeight; });
+  });
+
+  // 문서 전체 keydown 리스너(+page.svelte)는 .ai-input에 포커스가 있으면 손대지 않는다 — Esc만
+  // 여기서 처리하고 전파를 끊는다(안 끊으면 포커스가 빠진 뒤 그 리스너가 같은 Esc로 검색 결과 등을 지운다).
+  function onPanelKeydown(e) {
+    if (e.key !== 'Escape') return;
+    e.preventDefault();
+    e.stopPropagation();
+    if (ai.busy) invoke('ai_stop');
+    else { document.activeElement?.blur(); onExit?.(); }
+  }
+
+  function onInputKeydown(e) {
+    if (e.isComposing) return; // 한글 IME 조합 중 Enter/↑/↓는 조합용
+    // ↑/↓: 이전/다음 질문 — 여러 줄 입력 안에서 줄 이동은 그대로 두려고 첫 줄(↑)/마지막 줄(↓)에 커서가 있을 때만
+    const el = e.currentTarget;
+    if (e.key === 'ArrowUp' && !el.value.slice(0, el.selectionStart).includes('\n')) {
+      e.preventDefault();
+      input = promptHistory.up(input);
+      return;
+    }
+    if (e.key === 'ArrowDown' && !el.value.slice(el.selectionEnd).includes('\n')) {
+      e.preventDefault();
+      input = promptHistory.down(input);
+      return;
+    }
+    if (e.key !== 'Enter' || e.shiftKey) return;
+    e.preventDefault();
+    const q = input;
+    input = '';
+    askAi(path, q);
+  }
+
+  // 답 HTML은 {@html} 대신 직접 넣는다 — 실제 앱(WKWebView)에서 새 말풍선이 이전 답의 HTML을 단 채로 생기고
+  // {@html}이 첫 렌더링을 건너뛰어, 첫 토큰이 올 때까지 이전 답이 그대로 보였다(MutationObserver로 확인. 따로 띄운
+  // WebKit/happy-dom에서는 재현이 안 돼 Svelte 쪽 원인은 못 찾았다). 만들 때와 바뀔 때마다 덮어쓰면 처음 상태와 상관없다.
+  function markdown(node, src) {
+    const render = (s) => { node.innerHTML = DOMPurify.sanitize(marked.parse(s || '…')); };
+    render(src);
+    return { update: render };
+  }
+
+  // 답 안의 링크를 그대로 따라가면 앱 webview 자체가 그 페이지로 넘어가 버린다 — 브라우저로 연다
+  function onListClick(e) {
+    const a = e.target.closest('a[href]');
+    if (!a) return;
+    e.preventDefault();
+    if (/^https?:/.test(a.href)) openUrl(a.href);
+  }
+</script>
+
+<div class="ai-panel" role="presentation" tabindex="-1" onkeydown={onPanelKeydown}>
+  <div class="search-panel-header ai-header">
+    <select class="ai-input" bind:value={ai.model} onchange={() => save(MODEL_KEY, ai.model)} title={t('ai.model')} disabled={!ai.models?.length}>
+      {#each ai.models ?? [] as m (m)}<option value={m}>{m}</option>{/each}
+    </select>
+    <select class="ai-input" bind:value={ai.context} onchange={() => save(CONTEXT_KEY, ai.context)} title={t('ai.context')}>
+      <option value="page">{t('ai.context_page')}</option>
+      <option value="doc">{t('ai.context_doc')}</option>
+      <option value="image">{t('ai.context_image')}</option>
+    </select>
+    <button onclick={() => { delete ai.chats[path]; ai.error = ''; }} disabled={ai.busy} title={t('ai.clear')} tabindex="-1">✕</button>
+  </div>
+  <div class="ai-messages" bind:this={listEl} role="presentation" onclick={onListClick}>
+    {#if chat.messages.length === 0 && !ai.error && !chat.error}
+      <div class="search-empty-hint">{ai.models?.length === 0 ? t('ai.no_models') : t('ai.hint')}</div>
+    {/if}
+    {#each chat.messages as m, i (i)}
+      {#if m.role === 'user'}
+        <div class="ai-msg ai-user">{m.content}</div>
+      {:else}
+        {#if m.notice}<div class="ai-msg ai-notice">{t('ai.notice_' + m.notice)}</div>{/if}
+        <div class="ai-msg ai-assistant" use:markdown={m.content}></div>
+      {/if}
+    {/each}
+    {#if ai.error || chat.error}<div class="ai-msg ai-error">{ai.error || chat.error}</div>{/if}
+  </div>
+  <textarea
+    class="ai-input ai-textarea"
+    bind:this={inputEl}
+    bind:value={input}
+    onkeydown={onInputKeydown}
+    rows="3"
+    placeholder={ai.busy ? t('ai.busy') : t('ai.placeholder')}
+  ></textarea>
+</div>
+
+<style>
+  .ai-panel { outline: none; flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 6px; }
+  .ai-header { gap: 4px; }
+  .ai-header select { flex: 1; min-width: 0; font-size: 0.75rem; }
+  .ai-messages { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; }
+  .ai-msg { font-size: 0.8rem; line-height: 1.45; overflow-wrap: anywhere; }
+  .ai-user { white-space: pre-wrap; align-self: flex-end; max-width: 90%; padding: 4px 8px; border-radius: 6px; background: var(--sh-9); }
+  .ai-assistant :global(:is(p, ul, ol, pre)) { margin: 0 0 6px; }
+  .ai-assistant :global(pre) { overflow-x: auto; padding: 6px; border-radius: 4px; background: var(--sh-9); }
+  .ai-error { color: #e5484d; }
+  .ai-notice { font-size: 0.72rem; padding: 4px 6px; border-radius: 4px; border-left: 3px solid #f5a524; background: var(--sh-9); }
+  .ai-textarea { resize: vertical; font: inherit; font-size: 0.8rem; padding: 6px; }
+</style>

@@ -12,6 +12,7 @@ use regex::RegexBuilder;
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+mod ai;
 #[cfg(target_os = "macos")]
 mod ocr_macos;
 pub mod mcp;
@@ -115,7 +116,7 @@ fn set_app_language(app: tauri::AppHandle, lang: String) -> Result<(), String> {
 // MCP 서버(vimong --mcp)가 "지금 보고 있는 문서/페이지"를 알 수 있게 기록한다 — path가
 // 비어 있으면(웰컴 화면 등) 파일을 지워서 "열린 문서 없음"이 되게 한다.
 #[tauri::command]
-fn set_current_view(path: String, page: u32, page_count: u32, selection: String) {
+fn set_current_view(path: String, page: u32, page_count: u32, selection: String, reflow_em: Option<f32>) {
     let Some(file) = mcp::current_view_path() else { return };
     if path.is_empty() {
         let _ = std::fs::remove_file(&file);
@@ -124,7 +125,7 @@ fn set_current_view(path: String, page: u32, page_count: u32, selection: String)
     if let Some(parent) = file.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
-    let view = serde_json::json!({ "path": path, "page": page, "page_count": page_count, "selection": selection });
+    let view = serde_json::json!({ "path": path, "page": page, "page_count": page_count, "selection": selection, "reflow_em": reflow_em });
     let _ = std::fs::write(&file, view.to_string());
 }
 
@@ -5774,6 +5775,9 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             set_current_view,
+            ai::ai_models,
+            ai::ai_chat,
+            ai::ai_stop,
             read_file_bytes,
             get_file_mtime,
             open_pdf,
