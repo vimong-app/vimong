@@ -8989,8 +8989,9 @@
     <div class="modal quit-modal export-many-modal" onclick={(e) => e.stopPropagation()}>
       <h2>{t(exportManyMerge ? 'export.confirm_many_merge' : 'export.confirm_many', { n: exportManyCount })}</h2>
       <div class="quit-actions">
-        <button use:focusOnMount onclick={() => resolveExportMany(false)}>{t('modal.cancel')}</button>
-        <button class="password-confirm-btn" onclick={() => resolveExportMany(true)}>{t('export.confirm')}</button>
+        <!-- Enter로 실행되는 건 포커스된 '취소'이므로 기본 버튼 스타일도 '취소'에 준다 -->
+        <button class="password-confirm-btn" use:focusOnMount onclick={() => resolveExportMany(false)}>{t('modal.cancel')}</button>
+        <button onclick={() => resolveExportMany(true)}>{t('export.confirm')}</button>
       </div>
     </div>
   </div>
