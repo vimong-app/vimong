@@ -32,6 +32,12 @@
     }
   }
 
+  // 목차 "AI에게 묻기"로 정한 범위 — { spec: '96-110', title } | null. 대화(문서)마다 따로
+  export function setAiScope(path, scope) {
+    ai.chats[path] ??= { messages: [], error: '' };
+    ai.chats[path].scope = scope;
+  }
+
   export async function askAi(path, text) {
     text = text.trim();
     if (!text || ai.busy) return;
@@ -53,7 +59,7 @@
     ai.busy = true;
     chat.error = '';
     try {
-      await invoke('ai_chat', { model: ai.model, messages: history, context: ai.context, onEvent });
+      await invoke('ai_chat', { model: ai.model, messages: history, context: ai.context, pages: chat.scope?.spec ?? null, title: chat.scope?.title ?? null, onEvent });
     } catch (e) {
       chat.error = String(e);
       if (!reply.content) chat.messages.pop();
@@ -143,7 +149,7 @@
     <select class="ai-input" bind:value={ai.model} onchange={() => save(MODEL_KEY, ai.model)} title={t('ai.model')} disabled={!ai.models?.length}>
       {#each ai.models ?? [] as m (m)}<option value={m}>{m}</option>{/each}
     </select>
-    <select class="ai-input" bind:value={ai.context} onchange={() => save(CONTEXT_KEY, ai.context)} title={t('ai.context')}>
+    <select class="ai-input" bind:value={ai.context} onchange={() => save(CONTEXT_KEY, ai.context)} title={chat.scope ? t('ai.context_scoped') : t('ai.context')} disabled={!!chat.scope}>
       <option value="page">{t('ai.context_page')}</option>
       <option value="doc">{t('ai.context_doc')}</option>
       <option value="image">{t('ai.context_image')}</option>
@@ -165,6 +171,12 @@
     {/each}
     {#if ai.error || chat.error}<div class="ai-msg ai-error">{ai.error || chat.error}</div>{/if}
   </div>
+  {#if chat.scope}
+    <div class="ai-scope">
+      <span>{chat.scope.title ? t('ai.scope_title', { title: chat.scope.title, spec: chat.scope.spec }) : t('ai.scope', { spec: chat.scope.spec })}</span>
+      <button onclick={() => setAiScope(path, null)} title={t('ai.scope_clear')} tabindex="-1">✕</button>
+    </div>
+  {/if}
   <textarea
     class="ai-input ai-textarea"
     bind:this={inputEl}
@@ -185,6 +197,9 @@
   .ai-assistant :global(:is(p, ul, ol, pre)) { margin: 0 0 6px; }
   .ai-assistant :global(pre) { overflow-x: auto; padding: 6px; border-radius: 4px; background: var(--sh-9); }
   .ai-error { color: #e5484d; }
+  /* +page.svelte의 .search-scope(검색 범위 표시)와 같은 모양 */
+  .ai-scope { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 6px; border-radius: 3px; background: rgba(58, 110, 168, 0.25); color: var(--sh-21); font-size: 0.75rem; }
+  .ai-scope button { background: none; border: none; color: var(--sh-18); cursor: pointer; font-size: 0.75rem; }
   .ai-tool { font-size: 0.72rem; color: var(--sh-15); margin-bottom: -4px; }
   .ai-tool::before { content: '↳ '; }
   .ai-notice { font-size: 0.72rem; padding: 4px 6px; border-radius: 4px; border-left: 3px solid #f5a524; background: var(--sh-9); }

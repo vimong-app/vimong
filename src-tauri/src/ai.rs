@@ -71,12 +71,24 @@ pub fn ai_stop() {
 // on_event: {"notice": 코드}(맥락을 못 붙였을 때, 답보다 먼저 한 번), {"tool": 이름, "args": 인자}(모델이 도구를
 // 부를 때마다), {"delta": 답 조각}
 #[tauri::command]
-pub async fn ai_chat(model: String, mut messages: Vec<Value>, context: String, on_event: Channel<Value>) -> Result<(), String> {
+// pages/title: 목차 우클릭 "AI에게 묻기"로 정한 범위 — 있으면 맥락 옵션과 상관없이 그 범위를 끝까지 읽는다
+pub async fn ai_chat(
+    model: String,
+    mut messages: Vec<Value>,
+    context: String,
+    pages: Option<String>,
+    title: Option<String>,
+    on_event: Channel<Value>,
+) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
         STOP.store(false, Ordering::Relaxed);
         let send = |v: Value| on_event.send(v).map_err(|e| e.to_string());
         let question = messages.last().and_then(|m| m["content"].as_str()).unwrap_or("").to_string();
-        let scope = if context == "doc" { read_scope(&model, &question, &send)? } else { None };
+        let scope = match pages {
+            Some(spec) => read_pages(&model, &question, &title.unwrap_or_default(), &spec, &send)?,
+            None if context == "doc" => read_scope(&model, &question, &send)?,
+            None => None,
+        };
         let (system, images, notice, use_tools) = build_context(&context, scope.is_none() && supports_tools(&model), scope);
         if let Some(code) = notice {
             send(json!({ "notice": code }))?;
@@ -194,7 +206,7 @@ fn split_pages(md: &str) -> Vec<(u32, String)> {
 }
 
 // 질문이 가리키는 범위를 모델에게 고르게 하고(번호/페이지만 답하는 짧은 JSON이라 작은 모델도 잘한다), 그 범위를
-// 앱이 직접 읽어 맥락 블록으로 돌려준다. 특정 사실을 묻는 질문(범위 없음)이면 None — 기존처럼 도구/앞부분으로.
+// read_pages로 앱이 직접 읽어 맥락 블록으로 돌려준다. 특정 사실을 묻는 질문(범위 없음)이면 None — 기존처럼 도구/앞부분으로.
 // 진행 상황은 {"tool": "scope"|"read"|"merge"} 이벤트로 답 위에 보인다.
 fn read_scope(model: &str, question: &str, send: &dyn Fn(Value) -> Result<(), String>) -> Result<Option<String>, String> {
     let Ok(view) = super::mcp::read_view() else { return Ok(None) };
@@ -246,8 +258,17 @@ fn read_scope(model: &str, question: &str, send: &dyn Fn(Value) -> Result<(), St
         _ => return Ok(None),
     };
     send(json!({ "tool": "scope", "args": { "title": label, "p": format!("{start}–{end}") } }))?;
-    let Ok(md) = super::mcp::to_markdown(&path, &format!("{start}-{end}"), page_count as usize) else { return Ok(None) };
-    let scope_label = if label.is_empty() { format!("pages {start}–{end}") } else { format!("{label} (pages {start}–{end})") };
+    read_pages(model, question, &label, &format!("{start}-{end}"), send)
+}
+
+// 정해진 범위(spec: "96-110" 또는 "3-10,15")를 끝까지 읽어 맥락 블록으로 — 짧으면 통째로, 길면 나눠 읽고 요점만 모은다
+fn read_pages(model: &str, question: &str, label: &str, spec: &str, send: &dyn Fn(Value) -> Result<(), String>) -> Result<Option<String>, String> {
+    let Ok(view) = super::mcp::read_view() else { return Ok(None) };
+    let path = view["path"].as_str().unwrap_or("").to_string();
+    let page_count = view["page_count"].as_u64().unwrap_or(0) as usize;
+    // 못 여는 파일(암호 등)은 build_context가 이유를 알린다
+    let Ok(md) = super::mcp::to_markdown(&path, spec, page_count) else { return Ok(None) };
+    let scope_label = if label.is_empty() { format!("pages {spec}") } else { format!("{label} (pages {spec})") };
     let pages = split_pages(&md);
     if pages.iter().all(|(_, t)| t.split_once("-->").is_none_or(|(_, body)| body.trim().is_empty())) {
         return Ok(None); // 스캔 등 텍스트가 없는 범위 — build_context가 이유("no_text")를 알린다

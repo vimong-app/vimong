@@ -14,7 +14,7 @@
   import { loadThemePref, saveThemePref, detectSystemTheme } from '$lib/theme.js';
   import Markdown, { buildMdToc, MD_THEMES } from '$lib/Markdown.svelte';
   import SplitPane from '$lib/SplitPane.svelte';
-  import AiPanel, { askAi } from '$lib/AiPanel.svelte';
+  import AiPanel, { askAi, setAiScope } from '$lib/AiPanel.svelte';
   import { createHistory } from '$lib/history.js';
 
   // MuPDF가 네이티브로 여는 포맷 (mupdf-sys 기본 빌드 기준: img/office/epub/cbz/xps/svg 핸들러)
@@ -4922,6 +4922,16 @@
       requestAnimationFrame(() => { if (document.activeElement !== searchInputEl) searchInputEl?.focus(); });
     });
   }
+  // toc 우클릭 "AI에게 묻기" — 선택한 섹션들로 AI 대화의 범위를 정한다. 검색 범위처럼 지울 때까지(AI 탭의 ✕)
+  // 그 문서의 대화에 계속 적용되고, AI 탭 입력창 위에 늘 보인다. 범위 전체를 읽는 건 Rust(ai.rs read_pages)
+  function askAiInTocSelection() {
+    const pages = selectedTocPages();
+    if (pages.size === 0) return;
+    const one = selectedTocIds.size <= 1 ? flatToc.find(it => it.id === selectedTocId) : null;
+    setAiScope(filePath, { spec: pagesToSpec(pages), title: one?.title ?? '' });
+    // 메뉴가 닫히며 포커스를 목차로 돌려놓은 뒤라 한 번 더 입력창으로(searchInTocSelection과 같은 이유)
+    openAiPanel().then(() => requestAnimationFrame(() => document.querySelector('.ai-textarea')?.focus()));
+  }
   function clearSearchScope() {
     searchScope = null;
     if (lastSearch) runSearch(lastSearch, false);
@@ -4964,6 +4974,8 @@
       items: [
         { label: t('context.export'), action: exportAction },
         { label: t('context.search_in_selection'), action: searchInTocSelection },
+        // hwp는 AI가 내용을 못 읽는다(ai.rs build_context) — 메뉴에서부터 뺀다
+        ...(hwpMode ? [] : [{ label: t('context.ask_ai'), action: askAiInTocSelection }]),
       ],
       returnFocus: document.activeElement,
     };
