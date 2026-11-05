@@ -46,8 +46,8 @@
 | `zi` | Zoom in |
 | `zo` | Zoom out |
 | `z0` | Reset zoom |
-| `zh` | Fit to window width |
-| `zv` / `zz` | Fit to window height |
+| `zh` / `zz` | Fit to window width |
+| `zv` | Fit to window height |
 
 ### Search
 | Key | Action |

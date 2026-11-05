@@ -4281,7 +4281,7 @@
       attachments = await invoke('get_attachments');
       sidebarView = tocIsMeaningful ? 'toc' : 'thumbs';
 
-      // fit to window height(zz와 동일) — 이 페이지 크기를 initThumbScale에도 그대로 넘겨서
+      // fit to window height(zv와 동일) — 이 페이지 크기를 initThumbScale에도 그대로 넘겨서
       // 같은 get_page_size(0) IPC 왕복을 열 때마다 반복하지 않게 한다
       const pageSize0 = await invoke('get_page_size', { pageNum: 0 });
       const [, pageH] = pageSize0;
@@ -5793,7 +5793,7 @@
       zUsed = true;
       // z를 쥔 채로 있으면(zHeld) pendingPrefix를 'z'로 유지해서 i/o를 여러 번 다시 눌러도
       // 매번 z를 새로 안 눌러도 되게 한다(PDF 뷰어 관례) — 그런데 z를 뗀 뒤에도 이걸 안
-      // 지워두면, 한참 뒤에 완전히 새로 누르는 z(다음 zi/zo 시도의 첫 키)가 "zz(높이 맞춤)"의
+      // 지워두면, 한참 뒤에 완전히 새로 누르는 z(다음 zi/zo 시도의 첫 키)가 "zz(폭 맞춤)"의
       // 두 번째 z로 오인되어 소비되고 뒤따르는 i/o는 프리픽스 없이 허공에 뜨는 버그가 있었다
       // (zi/zo를 반복할 때 홀수 번째가 반응 없는 것처럼 보인 원인) — 그래서 z를 뗄 때(아래
       // svelte:window의 onkeyup)도 pendingPrefix를 같이 지운다.
@@ -5821,9 +5821,9 @@
       if (key === 'i') { scale = Math.min(+(scale + 0.25 * zc).toFixed(2), 12); triggerRerender(); return; }
       if (key === 'o') { scale = Math.max(+(scale - 0.25 * zc).toFixed(2), 0.25); triggerRerender(); return; }
       if (key === '0') { scale = zN ? Math.min(Math.max(zN / 100, 0.25), 12) : 1.0; triggerRerender(); return; }
-      if (key === 'h') { await fitToWidth(); return; }
+      if (key === 'h' || key === 'z') { await fitToWidth(); return; }
       if (key === 'c') { await fitToContentWidth(); return; }
-      if (key === 'v' || key === 'z') { await fitToHeight(); return; }
+      if (key === 'v') { await fitToHeight(); return; }
     }
 
     // ── g-prefix: gg / gt / gT ──
@@ -7246,7 +7246,7 @@
   onkeydown={handleKeydown}
   onkeyup={(e) => {
     // z를 쥔 채 zi/zo를 실행했다면 떼는 순간 "z-prefix 세션"을 끝낸다 — 안 그러면 다음에 새로
-    // 누르는 z가 zz(높이 맞춤)의 두 번째 z로 오인된다. 아직 아무 명령도 안 했다면(z를 눌렀다
+    // 누르는 z가 zz(폭 맞춤)의 두 번째 z로 오인된다. 아직 아무 명령도 안 했다면(z를 눌렀다
     // 떼고 h/v/0/z를 누르는 일반적인 입력) 프리픽스를 유지해야 zh/zv/z0/zz가 동작한다.
     if (e.key === 'z') { zHeld = false; if (zUsed && pendingPrefix === 'z') pendingPrefix = ''; }
   }}
@@ -8345,9 +8345,9 @@
               <tr><td>zi</td><td>{t('shortcuts.zoom.in')}</td></tr>
               <tr><td>zo</td><td>{t('shortcuts.zoom.out')}</td></tr>
               <tr><td>z0</td><td>{t('shortcuts.zoom.reset')}</td></tr>
-              <tr><td>zh</td><td>{t('shortcuts.zoom.fit_width')}</td></tr>
+              <tr><td>zh / zz</td><td>{t('shortcuts.zoom.fit_width')}</td></tr>
               <tr><td>zc</td><td>{t('shortcuts.zoom.fit_content')}</td></tr>
-              <tr><td>zv / zz</td><td>{t('shortcuts.zoom.fit_height')}</td></tr>
+              <tr><td>zv</td><td>{t('shortcuts.zoom.fit_height')}</td></tr>
               <tr><td>⌘+</td><td>{t('shortcuts.zoom.in')}</td></tr>
               <tr><td>⌘−</td><td>{t('shortcuts.zoom.out')}</td></tr>
             </tbody></table>

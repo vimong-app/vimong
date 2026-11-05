@@ -164,8 +164,8 @@
         if (key === 'i') await setScale(scale + 0.25 * n);
         else if (key === 'o') await setScale(scale - 0.25 * n);
         else if (key === '0') await setScale(count ? n / 100 : 1);
-        else if (key === 'h' && pw) await setScale((el.clientWidth - 2 * PAD) / pw);
-        else if ((key === 'v' || key === 'z') && ph) await setScale((el.clientHeight - 2 * PAD) / ph);
+        else if ((key === 'h' || key === 'z') && pw) await setScale((el.clientWidth - 2 * PAD) / pw);
+        else if (key === 'v' && ph) await setScale((el.clientHeight - 2 * PAD) / ph);
         else if (key === 'c') await fitContentWidth();
         count = '';
         return true;
