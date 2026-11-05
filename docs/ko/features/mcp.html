@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>AI 연동 (MCP) — Vimong</title>
-  <meta name="description" content="Vimong에 내장된 MCP 서버로 Claude 같은 AI 어시스턴트가 지금 보는 페이지를 읽고, 그림을 보고, 메모를 읽고, 문장을 하이라이트하고, 페이지를 이동합니다.">
+  <title>AI 연동 — Vimong</title>
+  <meta name="description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 로컬 AI 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
   <link rel="canonical" href="https://vimong.app/ko/features/mcp.html">
   <link rel="alternate" hreflang="ko" href="https://vimong.app/ko/features/mcp.html">
   <link rel="alternate" hreflang="en" href="https://vimong.app/en/features/mcp.html">
   <link rel="alternate" hreflang="x-default" href="https://vimong.app/en/features/mcp.html">
   <meta property="og:type" content="article">
-  <meta property="og:title" content="AI 연동 (MCP) — Vimong">
-  <meta property="og:description" content="Vimong에 내장된 MCP 서버로 Claude 같은 AI 어시스턴트가 지금 보는 페이지를 읽고, 그림을 보고, 메모를 읽고, 문장을 하이라이트하고, 페이지를 이동합니다.">
+  <meta property="og:title" content="AI 연동 — Vimong">
+  <meta property="og:description" content="지금 읽고 있는 페이지에 대해 Vimong 안에서 로컬 AI 모델에게 묻거나, 내장 MCP 서버로 Claude 같은 AI 어시스턴트가 문서를 다루게 할 수 있습니다.">
   <meta property="og:image" content="https://vimong.app/assets/icon.png">
   <meta property="og:url" content="https://vimong.app/ko/features/mcp.html">
   <link rel="icon" href="../../assets/favicon.png?v=7">
@@ -37,12 +37,66 @@
 
   <main class="mx-auto max-w-3xl px-6 py-16">
     <a href="../index.html#features" class="text-sm text-neutral-500 hover:text-white">← 모든 기능</a>
-    <h1 class="mt-4 text-3xl font-bold text-white">AI 연동 (MCP)</h1>
-    <p class="mt-3 flex items-center gap-3 text-sm text-neutral-500"><span>지원 형식:</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/pdf.svg" alt="" width="32" height="32">PDF</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/epub.svg" alt="" width="32" height="32">EPUB</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/document.svg" alt="" width="32" height="32">XPS</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/img.svg" alt="" width="32" height="32">이미지</span><span>등 (HWP·마크다운 제외)</span></p>
-    <p class="mt-3 text-neutral-400">Vimong에는 <a href="https://modelcontextprotocol.io" class="text-white hover:underline">MCP</a> 서버가 내장되어 있어서, Claude 같은 AI 어시스턴트가 Vimong에 열어둔 문서를 직접 다룰 수 있습니다. 텍스트를 채팅창에 복사해 붙일 필요 없이 "이 페이지", "선택한 문장"이라고만 말하면 됩니다.</p>
+    <h1 class="mt-4 text-3xl font-bold text-white">AI 연동</h1>
+    <p class="mt-3 flex items-center gap-3 text-sm text-neutral-500"><span>지원 형식:</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/pdf.svg" alt="" width="32" height="32">PDF</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/epub.svg" alt="" width="32" height="32">EPUB</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/document.svg" alt="" width="32" height="32">XPS</span><span class="flex flex-col items-center text-xs"><img src="../../assets/formats/img.svg" alt="" width="32" height="32">이미지</span><span>등 (HWP 제외, 마크다운은 앱 안에서만)</span></p>
+    <p class="mt-3 text-neutral-400">지금 읽고 있는 문서에 AI를 쓰는 방법은 두 가지입니다:</p>
+    <table class="mt-4 w-full border-collapse text-sm">
+      <tbody class="divide-y divide-white/10">
+        <tr><td class="py-3 pr-4"><a href="#in-app" class="text-white hover:underline">Vimong 안에서</a></td><td class="py-3 text-neutral-400"><span class="kbd">a</span>를 누르고 내 컴퓨터에서 돌아가는 모델(Ollama)에게 묻습니다. 문서가 컴퓨터 밖으로 나가지 않습니다</td></tr>
+        <tr><td class="py-3 pr-4"><a href="#mcp" class="text-white hover:underline">다른 AI 앱에서</a></td><td class="py-3 text-neutral-400">Claude 같은 어시스턴트가 내장 MCP 서버를 통해 지금 보는 페이지를 읽고, 그림을 보고, 문장을 하이라이트하고, 페이지를 이동합니다</td></tr>
+      </tbody>
+    </table>
 
-    <section class="mt-10">
-      <h2 class="text-lg font-semibold text-white">이런 요청을 할 수 있습니다</h2>
+    <section id="in-app" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">Vimong 안에서 (로컬 AI)</h2>
+      <p class="mt-3 text-neutral-400"><span class="kbd">a</span>를 누르면 사이드바에 AI 탭이 열리고, 지금 읽고 있는 페이지에 대해 물어볼 수 있습니다. 답은 <a href="https://ollama.com" class="text-white hover:underline">Ollama</a>로 내 컴퓨터에서 돌아가는 모델이 만들기 때문에 문서가 컴퓨터 밖으로 나가지 않고, 계정이나 API 키도 필요 없습니다.</p>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">키</h3>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4"><span class="kbd">a</span></td><td class="py-3 text-neutral-400">사이드바 AI 탭을 열고 바로 입력</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">:ai</span> / <span class="kbd">:ai {질문}</span></td><td class="py-3 text-neutral-400">AI 탭 열기, 또는 바로 질문</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Enter</span> / <span class="kbd">Shift</span>+<span class="kbd">Enter</span></td><td class="py-3 text-neutral-400">보내기 / 줄바꿈</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">↑</span> / <span class="kbd">↓</span></td><td class="py-3 text-neutral-400">이전 / 다음에 했던 질문</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">Esc</span></td><td class="py-3 text-neutral-400">답하는 중이면 중단, 아니면 본문으로</td></tr>
+          <tr><td class="py-3 pr-4"><span class="kbd">[</span> / <span class="kbd">]</span></td><td class="py-3 text-neutral-400">사이드바 탭 전환 — AI 탭도 포함</td></tr>
+        </tbody>
+      </table>
+    </section>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">AI가 보는 내용</h3>
+      <p class="mt-3 text-neutral-400">질문과 함께 보낼 내용은 패널 위쪽 메뉴에서 고릅니다. 선택한 텍스트는 항상 함께 보내므로, "이거 번역해줘", "이게 무슨 뜻이야?"는 선택한 부분에 대해 답합니다.</p>
+      <table class="mt-4 w-full border-collapse text-sm">
+        <tbody class="divide-y divide-white/10">
+          <tr><td class="py-3 pr-4 text-white">현재 페이지 텍스트</td><td class="py-3 text-neutral-400">지금 보는 페이지의 텍스트 — "이 페이지 요약해줘"</td></tr>
+          <tr><td class="py-3 pr-4 text-white">현재 파일 전체 텍스트</td><td class="py-3 text-neutral-400">지금 보는 파일 전체의 텍스트, 앞에서부터 4만 자까지 — "결론이 뭐야?"</td></tr>
+          <tr><td class="py-3 pr-4 text-white">현재 페이지 텍스트 + 이미지</td><td class="py-3 text-neutral-400">페이지 텍스트와 페이지를 찍은 그림 — 그림, 표, 수식, 스캔 페이지. 비전 모델이 필요합니다</td></tr>
+        </tbody>
+      </table>
+      <p class="mt-3 text-neutral-400">문서는 질문하는 순간에 읽기 때문에, 페이지를 넘긴 뒤에는 "이 페이지"가 지금 페이지를 가리킵니다. 대화는 파일마다 따로 남습니다.</p>
+    </section>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">설정</h3>
+      <p class="mt-3 text-neutral-400">Ollama를 설치하고 모델을 받습니다:</p>
+      <pre class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] p-6 font-mono text-sm text-neutral-300">brew install ollama
+ollama serve            # Ollama 앱을 쓰면 필요 없음
+ollama pull qwen3:8b    # 텍스트 질문용
+ollama pull qwen2.5vl:7b  # 그림·스캔 페이지용 (비전)</pre>
+      <p class="mt-3 text-neutral-400">모델은 패널의 메뉴에서 고릅니다. 나중에 받은 모델은 Vimong을 다시 실행하면 나타납니다. 메모리 16GB Mac에서는 7~14B(5~9GB) 모델이 무난하고, 비전 모델로는 <span class="kbd">gemma3:12b</span>, <span class="kbd">llama3.2-vision:11b</span>도 쓸 수 있습니다.</p>
+      <p class="mt-3 text-neutral-400">Vimong은 <span class="kbd">127.0.0.1:11434</span>의 Ollama에 연결합니다. <span class="kbd">OLLAMA_HOST</span>가 설정돼 있으면 그 주소를 씁니다.</p>
+    </section>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">알아두면 좋은 점</h3>
+      <p class="mt-3 text-neutral-400">파일 내용을 보낼 수 없을 때(암호로 보호된 PDF, HWP 파일, 텍스트가 없는 스캔 페이지)는 답 위에 그 이유가 표시되고, 답은 질문만으로 만들어집니다. 스캔 페이지는 "현재 페이지 텍스트 + 이미지"로 바꾸세요.</p>
+      <p class="mt-3 text-neutral-400">마크다운 파일은 어떤 옵션을 고르든 원문 전체를 보냅니다.</p>
+    </section>
+    </section>
+
+    <section id="mcp" class="mt-12 scroll-mt-24">
+      <h2 class="text-lg font-semibold text-white">다른 AI 앱에서 (MCP)</h2>
+      <p class="mt-3 text-neutral-400">Vimong에는 <a href="https://modelcontextprotocol.io" class="text-white hover:underline">MCP</a> 서버가 내장되어 있어서, Claude 같은 AI 어시스턴트가 Vimong에 열어둔 문서를 직접 다룰 수 있습니다. 텍스트를 채팅창에 복사해 붙일 필요 없이 "이 페이지", "선택한 문장"이라고만 말하면 됩니다.</p>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">이런 요청을 할 수 있습니다</h3>
       <table class="mt-4 w-full border-collapse text-sm">
         <tbody class="divide-y divide-white/10">
           <tr><td class="py-3 pr-4 text-white">"이 페이지 요약해줘"</td><td class="py-3 text-neutral-400">지금 보고 있는 페이지를 읽습니다</td></tr>
@@ -55,9 +109,8 @@
       </table>
       <p class="mt-3 text-neutral-400">매번 "Vimong"이라고 말하지 않아도 됩니다. 다른 문서 관련 도구도 함께 연결해 두었다면 "Vimong에서"라고 붙이면 확실합니다.</p>
     </section>
-
-    <section class="mt-10">
-      <h2 class="text-lg font-semibold text-white">설정</h2>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">설정</h3>
       <p class="mt-3 text-neutral-400"><strong class="text-white">Claude Code</strong>에 등록:</p>
       <pre class="mt-4 overflow-x-auto rounded-xl border border-white/10 bg-white/[0.03] p-6 font-mono text-sm text-neutral-300">claude mcp add -s user vimong -- /Applications/Vimong.app/Contents/MacOS/vimong --mcp</pre>
       <p class="mt-6 text-neutral-400"><strong class="text-white">Claude Desktop</strong>은 <span class="kbd">~/Library/Application Support/Claude/claude_desktop_config.json</span>에 아래 내용을 추가한 뒤, Claude Desktop을 완전히 종료했다가 다시 실행하세요:</p>
@@ -71,9 +124,8 @@
 }</pre>
       <p class="mt-3 text-neutral-400">Windows와 Linux에서는 설치된 <span class="kbd">vimong</span> 실행 파일 경로를 쓰면 됩니다. 다른 MCP 클라이언트도 같은 방식으로, <span class="kbd">vimong --mcp</span>를 stdio 서버로 실행하도록 등록하면 됩니다.</p>
     </section>
-
-    <section class="mt-10">
-      <h2 class="text-lg font-semibold text-white">도구</h2>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">도구</h3>
       <table class="mt-4 w-full border-collapse text-sm">
         <tbody class="divide-y divide-white/10">
           <tr><td class="py-3 pr-4"><span class="kbd">get_current_view</span></td><td class="py-3 text-neutral-400">문서 경로, 현재 페이지, 전체 페이지 수</td></tr>
@@ -91,12 +143,12 @@
       </table>
       <p class="mt-3 text-neutral-400">페이지 인자를 생략하면 지금 보는 페이지가 대상이고, <span class="kbd">3</span>, <span class="kbd">1-3,7</span>, <span class="kbd">all</span> 형식도 받습니다.</p>
     </section>
-
-    <section class="mt-10">
-      <h2 class="text-lg font-semibold text-white">알아두면 좋은 점</h2>
+    <section class="mt-8">
+      <h3 class="font-semibold text-white">알아두면 좋은 점</h3>
       <p class="mt-3 text-neutral-400">Vimong이 실행 중이고 문서가 열려 있어야 합니다. AI는 요청할 때마다 지금 보고 있는 문서와 페이지를 다시 확인하므로, 대화 도중에 문서나 페이지를 바꿔도 됩니다.</p>
       <p class="mt-3 text-neutral-400">AI가 추가한 하이라이트는 직접 칠한 것과 똑같이 동작합니다. <span class="kbd">:w</span>로 저장하기 전까지는 파일에 쓰이지 않고, <span class="kbd">u</span>로 취소할 수 있습니다. 하이라이트와 메모는 PDF 파일에서 동작합니다.</p>
       <p class="mt-3 text-neutral-400">읽기 도구는 디스크의 파일을 읽기 때문에, <span class="kbd">:w</span>로 저장하지 않은 하이라이트와 메모는 포함되지 않습니다.</p>
+    </section>
     </section>
   </main>
 

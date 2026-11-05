@@ -39,7 +39,7 @@ Vimong은 화면을 마우스로 스크롤하는 대신 `j`/`k`/`gg`/`G` 같은 
 - **탭** — `Cmd+T`로 새 탭, `gt`/`gT`로 전환, `:tabonly`/`:tabmove` 등 vim 탭 명령 지원
 - **분할 보기** — `:vsplit`/`:split`으로 PDF의 두 위치나 서로 다른 두 문서를 나란히 보기, 창마다 따로 스크롤·확대·검색
 - **프레젠테이션 모드** — `p`로 전체화면 슬라이드쇼 전환
-- **AI 연동 (MCP)** — Claude 등 AI 어시스턴트가 지금 보는 페이지를 읽고, 하이라이트를 정리하고, 페이지를 이동
+- **AI 연동** — `a`를 누르고 로컬 AI 모델(Ollama)에게 페이지, 선택한 문장, 그림에 대해 질문(문서는 내 컴퓨터 밖으로 나가지 않음), 또는 Claude 등 AI 어시스턴트가 지금 보는 페이지를 읽고, 하이라이트를 정리하고, 페이지를 이동(MCP)
 
 각 기능의 상세 설명은 [웹사이트](https://vimong.app/ko/)에서 확인할 수 있습니다.
 
@@ -55,7 +55,21 @@ brew install -y --cask vimong-app/tap/vimong
 
 또는 [Releases](https://github.com/vimong-app/vimong/releases/latest)에서 `.dmg`를 내려받으세요.
 
-## AI 연동 (MCP)
+## AI 연동
+
+### Vimong 안에서 (로컬 AI)
+
+`a`(또는 `:ai {질문}`)를 누르면 사이드바에 AI 탭이 열리고, 지금 읽고 있는 페이지에 대해 물어볼 수 있습니다. 답은 [Ollama](https://ollama.com)로 내 컴퓨터에서 돌아가는 모델이 만들기 때문에 문서가 밖으로 나가지 않습니다. 질문과 함께 보낼 내용(현재 페이지 텍스트, 현재 파일 전체 텍스트, 비전 모델용 페이지 텍스트 + 이미지)을 고를 수 있고, 선택한 텍스트는 항상 함께 보냅니다.
+
+```bash
+brew install ollama
+ollama pull qwen3:8b       # 텍스트 질문용
+ollama pull qwen2.5vl:7b   # 그림·스캔 페이지용 (비전)
+```
+
+자세한 내용은 [AI 연동 페이지](https://vimong.app/ko/features/mcp.html)를 보세요.
+
+### 다른 AI 앱에서 (MCP)
 
 Vimong에는 [MCP](https://modelcontextprotocol.io) 서버가 내장되어 있어서, Claude 같은 AI 어시스턴트가 지금 열어둔 문서를 다룰 수 있습니다. "이 페이지 요약해줘", "선택한 문장 번역해줘", "이 그림 설명해줘", "3장으로 이동해줘" 같은 요청이 가능합니다.
 
