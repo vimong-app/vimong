@@ -5305,7 +5305,8 @@
       if (key === 'Escape') { document.activeElement.blur(); e.preventDefault(); }
       return;
     }
-    if (document.activeElement?.classList?.contains('ai-input')) return; // AI 패널 입력창 — Esc는 AiPanel이 직접 처리
+    // AI 패널 입력창 — Esc는 AiPanel이 직접 처리. ⌘1~5(사이드바 탭)만 아래로 흘려보낸다
+    if (document.activeElement?.classList?.contains('ai-input') && !((e.metaKey || e.ctrlKey) && SIDEBAR_TAB_KEYS[e.code])) return;
 
     // ── 앱 메뉴(목차 우클릭 메뉴)가 떠 있으면 j/k·↑/↓로 이동, Enter/Space 실행, Esc 닫기. 다른 키는 삼킨다 ──
     if (appMenu) {
@@ -5621,18 +5622,14 @@
       e.preventDefault(); await switchToTab((currentTabIdx - 1 + tabLabels.length) % tabLabels.length); return;
     }
 
-    // ── ⌘1: 포인터, ⌘2: 텍스트 선택, ⌘3: 하이라이트, ⌘4: 메모 (툴바 도구 전환) ──
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'Digit1') {
-      e.preventDefault(); setToolMode('pointer'); return;
+    // ── ⌘1~5: 사이드바 탭으로 바로 (SIDEBAR_TAB_KEYS) ──
+    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && SIDEBAR_TAB_KEYS[e.code]) {
+      e.preventDefault(); await selectSidebarTab(SIDEBAR_TAB_KEYS[e.code]); return;
     }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'Digit2') {
-      e.preventDefault(); setToolMode('text'); return;
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'Digit3') {
-      e.preventDefault(); setToolMode('highlight'); return;
-    }
-    if ((e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && e.code === 'Digit4') {
-      e.preventDefault(); setToolMode('note'); return;
+    // ── ⌥1: 포인터, ⌥2: 텍스트 선택, ⌥3: 하이라이트, ⌥4: 메모 (툴바 도구 전환). ⌥+숫자는 macOS에서 ¡™£¢ 같은
+    // 글자가 되니 e.key가 아니라 e.code로 본다. ⇧⌘3/4/5는 macOS 스크린샷이라 못 쓴다 ──
+    if (e.altKey && !e.metaKey && !e.ctrlKey && !e.shiftKey && TOOL_KEYS[e.code]) {
+      e.preventDefault(); setToolMode(TOOL_KEYS[e.code]); return;
     }
 
     // ── ⌘Z: 하이라이트/도형 실행 취소 (u와 동일) — macOS 관례상 다들 이 단축키부터 눌러본다 ──
@@ -6328,6 +6325,29 @@
   // 클릭 등 다른 경로와도 같이 쓰여서 원래 포커스가 사이드바 안에 있었을 때만 옮겨주므로
   // (클릭으로 훑어볼 땐 포커스를 안 뺏으려고), 여기서 한 번 더 강제로 포커스한다. 사이드바가
   // 숨겨져 있었으면 보여준다(안 그러면 옮길 DOM 자체가 없다).
+  // ⌘1~5 → 사이드바 탭. 레이어/첨부파일 탭은 문서마다 있다 없다 해서 번호 없이 [/]로만 — 같은 키가 늘 같은 탭이게
+  const SIDEBAR_TAB_KEYS = { Digit1: 'thumbs', Digit2: 'toc', Digit3: 'search', Digit4: 'notes', Digit5: 'ai' };
+  const TOOL_KEYS = { Digit1: 'pointer', Digit2: 'text', Digit3: 'highlight', Digit4: 'note' }; // ⌥1~4
+
+  // ⌘1~5 — 그 탭으로 바로. 검색/AI는 입력창으로, 나머지는 [/]처럼 그 탭의 현재 항목으로 포커스
+  async function selectSidebarTab(view) {
+    if (pageCount === 0) return;
+    if (mdMode && (view === 'thumbs' || view === 'notes')) return; // 마크다운엔 없는 탭(탭 버튼도 없다)
+    if (view === 'toc' && shownToc.length === 0) { statusMsg = t('sidebar.toc_none'); return; }
+    if (view === 'search') { await focusSearchTab(); return; }
+    if (view === 'ai') { await openAiPanel(); return; }
+    await showSidebarView(view);
+  }
+
+  async function showSidebarView(view) {
+    sidebarVisible = true;
+    if (view === 'notes') await switchToNotesTab(); else await switchSidebarView(view);
+    await tick();
+    focusCurrentSidebarItem();
+    flashFocusRing(document.activeElement);
+    flashFocusRing(sidebarEl);
+  }
+
   async function cycleSidebarView(dir) {
     if (pageCount === 0) return;
     const views = mdMode
@@ -6336,13 +6356,7 @@
           (v !== 'toc' || toc.length > 0) && (v !== 'layers' || layers.length > 0) &&
           (v !== 'attachments' || attachments.length > 0));
     const idx = views.indexOf(sidebarView);
-    const next = views[(idx + dir + views.length) % views.length];
-    sidebarVisible = true;
-    if (next === 'notes') await switchToNotesTab(); else await switchSidebarView(next);
-    await tick();
-    focusCurrentSidebarItem();
-    flashFocusRing(document.activeElement);
-    flashFocusRing(sidebarEl);
+    await showSidebarView(views[(idx + dir + views.length) % views.length]);
   }
 
   // 사이드바 "메모" 탭 — 문서 전체 메모를 한 번에 모아 보여준다(search_all과 같은 목적).
@@ -6576,6 +6590,7 @@
 
   // ── Command input keydown (status bar <input> 전용) ────────
   function handleCmdInputKey(e) {
+    if (sidebarTabKeyFromInput(e)) return;
     // mode를 'normal'로 되돌리기 전에 버블링을 끊어야 한다 — 안 그러면 이 keydown이
     // svelte:window의 handleKeydown까지 올라갔을 때 이미 바뀐 mode를 보고(예: Enter로
     // 시작 화면의 최근 파일 열기 같은) 엉뚱한 동작을 같이 실행해버린다.
@@ -7120,7 +7135,21 @@
     input.setSelectionRange(at + text.length, at + text.length);
   }
 
+  // 검색/명령 입력창은 키 버블링을 끊어 handleKeydown까지 안 가니, ⌘1~5(사이드바 탭)는 여기서 먼저 받는다.
+  // 입력 모드를 끝내야 다른 탭에서 vim 키가 다시 먹는다(handleKeydown은 mode가 command/search면 바로 return)
+  function sidebarTabKeyFromInput(e) {
+    const view = (e.metaKey || e.ctrlKey) && !e.shiftKey && !e.altKey && SIDEBAR_TAB_KEYS[e.code];
+    if (!view) return false;
+    e.preventDefault();
+    e.stopPropagation();
+    mode = 'normal'; cmdInput = ''; cmdCompletion = null;
+    e.target.blur?.();
+    selectSidebarTab(view);
+    return true;
+  }
+
   function handleSearchInputKey(e) {
+    if (sidebarTabKeyFromInput(e)) return;
     // handleCmdInputKey와 같은 이유 — mode를 되돌리기 전에 버블링을 끊는다.
     e.stopPropagation();
     if (searchCtrlRPending && !['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) {
@@ -8305,6 +8334,8 @@
               <tr><td>{t('shortcuts.nav.toc_hl_key')}</td><td>{t('shortcuts.nav.toc_hl_desc')}</td></tr>
               <tr><td>{t('shortcuts.nav.toc_menu_key')}</td><td>{t('shortcuts.nav.toc_menu_desc')}</td></tr>
               <tr><td>⌘⇧T</td><td>{t('shortcuts.nav.toggle_sidebar')}</td></tr>
+              <tr><td>⌘1 – ⌘5</td><td>{t('shortcuts.nav.sidebar_tabs')}</td></tr>
+              <tr><td>⌥1 – ⌥4</td><td>{t('shortcuts.nav.tools')}</td></tr>
               <tr><td>p</td><td>{t('shortcuts.nav.presentation')}</td></tr>
               <tr><td>gi</td><td>{t('shortcuts.nav.page_invert')}</td></tr>
               <tr><td>⌃⌘F</td><td>{t('shortcuts.nav.fullscreen')}</td></tr>
