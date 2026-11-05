@@ -6865,6 +6865,15 @@
     showExportModal = false;
   }
 
+  // 내보내기 창 입력칸 공용 keydown. Enter에서 preventDefault가 꼭 필요하다 — 페이지가 많으면
+  // doExport가 확인창을 띄워 '취소'에 포커스를 주는데, 기본 동작을 안 막으면 같은 Enter의 후속
+  // keypress가 WebKit에서 그 취소 버튼을 눌러버려 창이 뜨자마자 닫힌다(아무 반응 없는 것처럼 보임).
+  function exportInputKeydown(e) {
+    e.stopPropagation();
+    if (e.key === 'Enter' && !e.isComposing) { e.preventDefault(); doExport(); }
+    else if (e.key === 'Escape') { e.preventDefault(); cancelExport(); }
+  }
+
   // 내보내기 창(완료 창까지)이 닫히면 열기 전 포커스(목차 항목 등)로 되돌린다 — 안 그러면 포커스가
   // body에 남아 테두리는 안 보이는데 키는 본문 기준으로 동작한다. 닫으면서 다른 창(페이지 범위
   // 도움말 등)이 포커스를 가져갔으면 건드리지 않는다. $effect.pre라 모달이 그려지기 전 포커스를 잡는다.
@@ -8861,7 +8870,7 @@
         use:focusOnMount
         onkeydown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Enter') submitWritePassword();
+          if (e.key === 'Enter') { e.preventDefault(); submitWritePassword(); } // 확인창 '취소'가 후속 keypress에 눌리지 않게
           else if (e.key === 'Escape') cancelWritePassword();
         }}
         placeholder={t('password.new')}
@@ -8872,7 +8881,7 @@
         bind:value={writePassword2}
         onkeydown={(e) => {
           e.stopPropagation();
-          if (e.key === 'Enter') submitWritePassword();
+          if (e.key === 'Enter') { e.preventDefault(); submitWritePassword(); }
           else if (e.key === 'Escape') cancelWritePassword();
         }}
         placeholder={t('password.new_confirm')}
@@ -8903,11 +8912,7 @@
           class="password-input"
           bind:value={exportPageSpec}
           use:focusOnMount
-          onkeydown={(e) => {
-            e.stopPropagation();
-            if (e.key === 'Enter' && !e.isComposing) doExport();
-            else if (e.key === 'Escape') { e.preventDefault(); cancelExport(); }
-          }}
+          onkeydown={exportInputKeydown}
           placeholder={t('export.page_spec_placeholder')}
         />
       </div>
@@ -8919,11 +8924,7 @@
             type="text"
             class="password-input"
             bind:value={exportFilename}
-            onkeydown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter' && !e.isComposing) doExport();
-              else if (e.key === 'Escape') { e.preventDefault(); cancelExport(); }
-            }}
+            onkeydown={exportInputKeydown}
             placeholder={t('export.filename_placeholder')}
           />
           <select id="export-format" aria-label={t('export.format')} bind:value={exportFormat}>
@@ -8945,11 +8946,7 @@
             type="password"
             class="password-input"
             bind:value={exportPassword}
-            onkeydown={(e) => {
-              e.stopPropagation();
-              if (e.key === 'Enter' && !e.isComposing) doExport();
-              else if (e.key === 'Escape') { e.preventDefault(); cancelExport(); }
-            }}
+            onkeydown={exportInputKeydown}
             placeholder={t('export.password_placeholder')}
           />
         </div>
