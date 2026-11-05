@@ -327,7 +327,19 @@
   let settingsTab = $state('ui'); // 'ui' | 'markdown' | 'synctex' | 'ai'
   // 설정 > AI — 주소/기본 모델/기본 맥락은 다른 탭처럼 "적용" 때 저장하고, 목록 새로고침·모델 받기는 바로 실행한다
   // (입력 중인 주소 기준이라 적용 전에 그 서버가 맞는지 확인해 볼 수 있다)
+  let settingsAiProviderDraft = $state('ollama');
   let settingsAiHostDraft = $state('');
+  let settingsAiKeyDraft = $state('');
+  const aiServerDraft = () => ({ provider: settingsAiProviderDraft, host: settingsAiHostDraft, key: settingsAiKeyDraft });
+  // 서버 종류별 기본 주소 — 입력칸에 실제 값으로 넣어 둔다(placeholder는 복사가 안 된다). Rust ai.rs Server::base_url과 같은 값
+  const AI_DEFAULT_HOSTS = { ollama: 'http://127.0.0.1:11434', openai: 'http://127.0.0.1:1234' };
+  // 종류를 바꿀 때 — 비었거나 다른 종류의 기본값 그대로면 새 종류의 기본값으로, 직접 고친 주소는 그대로
+  function onAiProviderChange() {
+    if (!settingsAiHostDraft.trim() || Object.values(AI_DEFAULT_HOSTS).includes(settingsAiHostDraft.trim())) {
+      settingsAiHostDraft = AI_DEFAULT_HOSTS[settingsAiProviderDraft];
+    }
+    openAiSettingsTab();
+  }
   let settingsAiModelDraft = $state('');
   let settingsAiContextDraft = $state('page');
   let aiPullName = $state('');
@@ -335,7 +347,7 @@
   let aiPullStatus = $state('');
   async function openAiSettingsTab() {
     settingsTab = 'ai';
-    await loadAiModels(settingsAiHostDraft);
+    await loadAiModels(aiServerDraft());
     if (!settingsAiModelDraft || !aiState.models?.includes(settingsAiModelDraft)) settingsAiModelDraft = aiState.models?.[0] ?? '';
   }
   async function pullAiModel(name) {
@@ -344,7 +356,7 @@
     aiPulling = name;
     aiPullStatus = t('settings.ai_pull_start', { name });
     try {
-      await pullModel(name, settingsAiHostDraft, ({ status, completed, total }) => {
+      await pullModel(name, aiServerDraft(), ({ status, completed, total }) => {
         const pct = total ? ` ${Math.floor((completed ?? 0) / total * 100)}%` : '';
         aiPullStatus = `${name}: ${status ?? ''}${pct}`;
       });
@@ -385,7 +397,8 @@
     settingsRestoreSessionDraft = restoreSession;
     settingsMdThemeDraft = mdTheme;
     settingsMdCodeFontDraft = mdCodeFont;
-    ({ host: settingsAiHostDraft, model: settingsAiModelDraft, context: settingsAiContextDraft } = aiSettings());
+    ({ provider: settingsAiProviderDraft, host: settingsAiHostDraft, key: settingsAiKeyDraft, model: settingsAiModelDraft, context: settingsAiContextDraft } = aiSettings());
+    if (!settingsAiHostDraft.trim()) settingsAiHostDraft = AI_DEFAULT_HOSTS[settingsAiProviderDraft] ?? AI_DEFAULT_HOSTS.ollama;
     aiPullStatus = '';
     showSettings = true;
     ensureSystemFontsLoaded(); // 모달은 바로 뜨고, 폰트 목록은 준비되는 대로 select에 반영(반응형)
@@ -409,7 +422,7 @@
     try { localStorage.setItem('vimong-md-theme', mdTheme); } catch (_) { /* skip */ }
     mdCodeFont = settingsMdCodeFontDraft;
     try { localStorage.setItem('vimong-md-code-font', mdCodeFont); } catch (_) { /* skip */ }
-    applyAiSettings({ host: settingsAiHostDraft, model: settingsAiModelDraft, context: settingsAiContextDraft });
+    applyAiSettings({ ...aiServerDraft(), model: settingsAiModelDraft, context: settingsAiContextDraft });
     showSettings = false;
   }
 
@@ -8718,15 +8731,29 @@
           <span class="quit-desc">{t('settings.synctex_editor_hint')}</span>
         </div>
       {:else if settingsTab === 'ai'}
+        <div class="settings-row">
+          <label for="settings-ai-provider">{t('settings.ai_provider')}</label>
+          <select id="settings-ai-provider" bind:value={settingsAiProviderDraft} onchange={onAiProviderChange}>
+            <option value="ollama">Ollama</option>
+            <option value="openai">{t('settings.ai_provider_openai')}</option>
+          </select>
+        </div>
         <div class="settings-row settings-row-col">
           <label for="settings-ai-host">{t('settings.ai_host')}</label>
           <div class="synctex-preset-row">
-            <input id="settings-ai-host" type="text" class="password-input" bind:value={settingsAiHostDraft} placeholder="http://127.0.0.1:11434"
+            <input id="settings-ai-host" type="text" class="password-input" bind:value={settingsAiHostDraft}
+              placeholder={AI_DEFAULT_HOSTS[settingsAiProviderDraft]}
               onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); openAiSettingsTab(); } }} />
             <button type="button" class="synctex-help-btn" onclick={openAiSettingsTab}>{t('settings.ai_refresh')}</button>
           </div>
-          <span class="quit-desc">{aiState.error || t('settings.ai_host_hint')}</span>
+          <span class="quit-desc">{aiState.error || t(settingsAiProviderDraft === 'openai' ? 'settings.ai_host_hint_openai' : 'settings.ai_host_hint')}</span>
         </div>
+        {#if settingsAiProviderDraft === 'openai'}
+          <div class="settings-row">
+            <label for="settings-ai-key">{t('settings.ai_key')}</label>
+            <input id="settings-ai-key" type="password" class="password-input" bind:value={settingsAiKeyDraft} placeholder={t('settings.ai_key_placeholder')} autocomplete="off" />
+          </div>
+        {/if}
         <div class="settings-row">
           <label for="settings-ai-model">{t('settings.ai_default_model')}</label>
           <select id="settings-ai-model" bind:value={settingsAiModelDraft} disabled={!aiState.models?.length}>
@@ -8747,14 +8774,20 @@
           {#each aiState.models ?? [] as m (m)}
             <div class="synctex-preset-row">
               <span class="ai-model-name">{m}</span>
-              <button type="button" class="synctex-help-btn" disabled={!!aiPulling} onclick={() => pullAiModel(m)} title={t('settings.ai_update_title')}>{t('settings.ai_update')}</button>
+              {#if settingsAiProviderDraft === 'ollama'}
+                <button type="button" class="synctex-help-btn" disabled={!!aiPulling} onclick={() => pullAiModel(m)} title={t('settings.ai_update_title')}>{t('settings.ai_update')}</button>
+              {/if}
             </div>
           {/each}
+          {#if settingsAiProviderDraft === 'openai'}
+            <span class="quit-desc">{t('settings.ai_openai_models_hint')}</span>
+          {:else}
           <div class="synctex-preset-row">
             <input type="text" class="password-input" bind:value={aiPullName} placeholder={t('settings.ai_pull_placeholder')}
               onkeydown={(e) => { if (e.key === 'Enter') { e.preventDefault(); pullAiModel(aiPullName); } }} />
             <button type="button" class="synctex-help-btn" disabled={!!aiPulling || !aiPullName.trim()} onclick={() => pullAiModel(aiPullName)}>{t('settings.ai_pull')}</button>
           </div>
+          {/if}
           {#if aiPullStatus}<span class="quit-desc">{aiPullStatus}</span>{/if}
         </div>
       {/if}

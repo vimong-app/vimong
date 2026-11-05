@@ -68,6 +68,8 @@ ollama pull qwen3:8b       # questions about text
 ollama pull qwen2.5vl:7b   # figures and scanned pages (vision)
 ```
 
+LM Studio, llama.cpp's `llama-server`, MLX-LM, Jan and other OpenAI-compatible servers work too — set **Server** to **OpenAI-compatible** in Settings → AI.
+
 See the [AI integration page](https://vimong.app/en/features/mcp.html) for details.
 
 ### From other AI apps (MCP)

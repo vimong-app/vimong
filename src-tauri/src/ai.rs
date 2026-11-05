@@ -25,61 +25,101 @@ const CHUNK_CHARS: usize = 8_000; // 나눠 읽을 때 한 번에 읽히는 분�
 const OUTLINE_CHARS: usize = 8_000; // 범위를 고를 때 보여주는 목차 분량 — 넘치면 상위 두 단계만
 
 static STOP: AtomicBool = AtomicBool::new(false);
-// 설정 > AI의 Ollama 주소(ai_set_host) — 비어 있으면 OLLAMA_HOST, 그것도 없으면 로컬 기본 포트
-static HOST: std::sync::Mutex<String> = std::sync::Mutex::new(String::new());
 
-#[tauri::command]
-pub fn ai_set_host(host: String) {
-    *HOST.lock().unwrap() = host;
+// 설정 > AI의 서버 — provider: "ollama"(기본) | "openai"(OpenAI 호환: LM Studio, llama.cpp, MLX-LM, Jan 등).
+// 대화/도구/범위 읽기는 안에서 Ollama 형식으로 다루고, OpenAI 호환이면 주고받는 지점(stream_reply)에서만 바꾼다.
+#[derive(Clone, Default, serde::Deserialize)]
+pub struct Server {
+    #[serde(default)]
+    provider: String,
+    #[serde(default)]
+    host: String,
+    #[serde(default)]
+    key: String,
 }
 
-fn base_url() -> String {
-    base_url_for(None)
-}
+impl Server {
+    fn openai(&self) -> bool {
+        self.provider == "openai"
+    }
 
-// host: 설정 창에서 아직 적용 전인 주소로 목록/받기를 해 볼 때. ponytail: ureq를 TLS 없이 넣어서 http만 된다
-fn base_url_for(host: Option<&str>) -> String {
-    let set = HOST.lock().unwrap().clone();
-    let h = host.map(str::to_string).filter(|h| !h.trim().is_empty()).or((!set.trim().is_empty()).then_some(set));
-    match h.or_else(|| std::env::var("OLLAMA_HOST").ok()).map(|h| h.trim().trim_end_matches('/').to_string()) {
-        Some(h) if h.starts_with("http") => h,
-        Some(h) if !h.is_empty() => format!("http://{h}"),
-        _ => "http://127.0.0.1:11434".into(),
+    // 비어 있으면 Ollama는 OLLAMA_HOST, 그것도 없으면 각자 기본 포트(Ollama 11434, LM Studio 1234).
+    // OpenAI 호환 주소는 .../v1까지 적어도 되게 뗀다(경로는 여기서 붙인다). ponytail: ureq를 TLS 없이 넣어서 http만 된다
+    fn base_url(&self) -> String {
+        let env = if self.openai() { None } else { std::env::var("OLLAMA_HOST").ok() };
+        let h = Some(self.host.trim()).filter(|h| !h.is_empty()).map(str::to_string).or(env);
+        let h = h.map(|h| h.trim().trim_end_matches('/').trim_end_matches("/v1").to_string());
+        match h {
+            Some(h) if h.starts_with("http") => h,
+            Some(h) if !h.is_empty() => format!("http://{h}"),
+            _ if self.openai() => "http://127.0.0.1:1234".into(),
+            _ => "http://127.0.0.1:11434".into(),
+        }
+    }
+
+    fn post(&self, path: &str) -> ureq::Request {
+        self.auth(ureq::post(&format!("{}{path}", self.base_url())))
+    }
+
+    fn get(&self, path: &str) -> ureq::Request {
+        self.auth(ureq::get(&format!("{}{path}", self.base_url())))
+    }
+
+    fn auth(&self, r: ureq::Request) -> ureq::Request {
+        if self.key.trim().is_empty() { r } else { r.set("Authorization", &format!("Bearer {}", self.key.trim())) }
+    }
+
+    fn http_err(&self, e: ureq::Error) -> String {
+        match e {
+            // Ollama는 {"error": "..."}, OpenAI 호환은 {"error": {"message": "..."}}
+            ureq::Error::Status(code, r) => r
+                .into_json::<Value>()
+                .ok()
+                .and_then(|v| v["error"].as_str().or(v["error"]["message"].as_str()).map(String::from))
+                .unwrap_or_else(|| format!("The AI server returned HTTP {code}")),
+            e if self.openai() => format!("Cannot reach the AI server at {} — is its local server running? ({e})", self.base_url()),
+            e => format!("Cannot reach Ollama at {} — is `ollama serve` running? ({e})", self.base_url()),
+        }
     }
 }
 
-fn http_err(e: ureq::Error) -> String {
-    match e {
-        ureq::Error::Status(code, r) => r
-            .into_json::<Value>()
-            .ok()
-            .and_then(|v| v["error"].as_str().map(String::from))
-            .unwrap_or_else(|| format!("Ollama returned HTTP {code}")),
-        e => format!("Cannot reach Ollama at {} — is `ollama serve` running? ({e})", base_url()),
-    }
+static SERVER: std::sync::Mutex<Server> = std::sync::Mutex::new(Server { provider: String::new(), host: String::new(), key: String::new() });
+
+#[tauri::command]
+pub fn ai_set_server(server: Server) {
+    *SERVER.lock().unwrap() = server;
+}
+
+// 지금 적용된 서버 — 설정 창에서 아직 적용 전인 서버로 목록/받기를 해 볼 때는 그 서버를 직접 넘긴다
+fn current() -> Server {
+    SERVER.lock().unwrap().clone()
 }
 
 #[tauri::command]
-pub async fn ai_models(host: Option<String>) -> Result<Vec<String>, String> {
+pub async fn ai_models(server: Option<Server>) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let tags: Value = ureq::get(&format!("{}/api/tags", base_url_for(host.as_deref())))
+        let s = server.unwrap_or_else(current);
+        let list: Value = s.get(if s.openai() { "/v1/models" } else { "/api/tags" })
             .call()
-            .map_err(http_err)?
+            .map_err(|e| s.http_err(e))?
             .into_json()
             .map_err(|e| e.to_string())?;
-        Ok(tags["models"].as_array().into_iter().flatten().filter_map(|m| m["name"].as_str().map(String::from)).collect())
+        let (items, key) = if s.openai() { (&list["data"], "id") } else { (&list["models"], "name") };
+        Ok(items.as_array().into_iter().flatten().filter_map(|m| m[key].as_str().map(String::from)).collect())
     })
     .await
     .map_err(|e| e.to_string())?
 }
 
-// 모델 받기/업데이트(ollama pull) — 같은 이름이면 바뀐 레이어만 받는다. 진행은 {status, completed, total}로
+// 모델 받기/업데이트(ollama pull) — 같은 이름이면 바뀐 레이어만 받는다. 진행은 {status, completed, total}로.
+// OpenAI 호환 서버에는 이런 API가 없어서 각 서버 앱(LM Studio 등)에서 받는다
 #[tauri::command]
-pub async fn ai_pull(model: String, host: Option<String>, on_event: Channel<Value>) -> Result<(), String> {
+pub async fn ai_pull(model: String, server: Option<Server>, on_event: Channel<Value>) -> Result<(), String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let resp = ureq::post(&format!("{}/api/pull", base_url_for(host.as_deref())))
+        let s = server.unwrap_or_else(current);
+        let resp = s.post("/api/pull")
             .send_json(json!({ "model": model.trim(), "stream": true }))
-            .map_err(http_err)?;
+            .map_err(|e| s.http_err(e))?;
         for line in std::io::BufReader::new(resp.into_reader()).lines() {
             let v: Value = serde_json::from_str(&line.map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
             if let Some(err) = v["error"].as_str() {
@@ -122,7 +162,7 @@ pub async fn ai_chat(
             None if context == "doc" => read_scope(&model, &question, &send)?,
             None => None,
         };
-        let (system, images, notice, use_tools) = build_context(&context, scope.is_none() && supports_tools(&model), scope);
+        let (system, images, notice, mut use_tools) = build_context(&context, scope.is_none() && supports_tools(&model), scope);
         if let Some(code) = notice {
             send(json!({ "notice": code }))?;
         }
@@ -144,7 +184,15 @@ pub async fn ai_chat(
             if use_tools && round < MAX_TOOL_ROUNDS {
                 body["tools"] = tools.clone();
             }
-            let (content, calls) = stream_reply(body, &send)?;
+            let (content, calls) = match stream_reply(body.clone(), &send) {
+                // OpenAI 호환은 모델이 도구를 지원하는지 미리 알 길이 없어 일단 붙여 본다 — 거절하면 도구 없이 다시
+                Err(_) if use_tools && round == 0 && current().openai() => {
+                    use_tools = false;
+                    body.as_object_mut().map(|b| b.remove("tools"));
+                    stream_reply(body, &send)?
+                }
+                r => r?,
+            };
             if calls.is_empty() || STOP.load(Ordering::Relaxed) {
                 break;
             }
@@ -153,7 +201,8 @@ pub async fn ai_chat(
                 let name = call["function"]["name"].as_str().unwrap_or("");
                 let args = normalize_args(&call["function"]["arguments"]);
                 send(json!({ "tool": name, "args": args }))?;
-                messages.push(json!({ "role": "tool", "tool_name": name, "content": run_tool(name, &args) }));
+                // tool_call_id는 OpenAI 호환용(Ollama는 이름으로 짝짓고 모르는 필드는 무시한다)
+                messages.push(json!({ "role": "tool", "tool_name": name, "tool_call_id": call["id"], "content": run_tool(name, &args) }));
             }
             if !content.is_empty() {
                 send(json!({ "delta": "\n\n" }))?; // 도구를 부르기 전에 한 말과 이어질 답을 문단으로 나눈다
@@ -220,9 +269,16 @@ fn unwrap_markdown_fence(text: &str) -> &str {
     .trim_end()
 }
 
-// 한 번의 /api/chat 스트림 — 답 조각은 바로 패널로 흘려보내고, 모은 본문과 도구 호출을 돌려준다
+// 한 번의 채팅 스트림 — 답 조각은 바로 패널로 흘려보내고, 모은 본문과 도구 호출(Ollama 형식)을 돌려준다.
+// body는 Ollama /api/chat 형식이고, OpenAI 호환 서버면 여기서 바꿔 보낸다
 fn stream_reply(body: Value, send: &dyn Fn(Value) -> Result<(), String>) -> Result<(String, Vec<Value>), String> {
-    let resp = ureq::post(&format!("{}/api/chat", base_url())).send_json(body).map_err(http_err)?;
+    let s = current();
+    if s.openai() {
+        let resp = s.post("/v1/chat/completions").send_json(to_openai_body(&body)).map_err(|e| s.http_err(e))?;
+        let lines = std::io::BufReader::new(resp.into_reader()).lines().map(|l| l.map_err(|e| e.to_string()));
+        return read_openai_stream(lines, send);
+    }
+    let resp = s.post("/api/chat").send_json(body).map_err(|e| s.http_err(e))?;
     let (mut content, mut calls) = (String::new(), Vec::new());
     // 스트림은 줄마다 JSON 하나(NDJSON)
     for line in std::io::BufReader::new(resp.into_reader()).lines() {
@@ -239,6 +295,90 @@ fn stream_reply(body: Value, send: &dyn Fn(Value) -> Result<(), String>) -> Resu
         }
         calls.extend(v["message"]["tool_calls"].as_array().into_iter().flatten().cloned());
     }
+    Ok((content, calls))
+}
+
+// Ollama /api/chat 요청을 OpenAI /v1/chat/completions 요청으로 — num_ctx는 OpenAI API에 없어서 서버 앱 설정을 따른다
+fn to_openai_body(body: &Value) -> Value {
+    let messages: Vec<Value> = body["messages"].as_array().into_iter().flatten().map(to_openai_message).collect();
+    let mut out = json!({ "model": body["model"], "messages": messages, "stream": true });
+    if let Some(tools) = body.get("tools") {
+        out["tools"] = tools.clone(); // tool_defs()가 이미 OpenAI 함수 형식
+    }
+    if let Some(schema) = body.get("format") {
+        out["response_format"] = json!({ "type": "json_schema", "json_schema": { "name": "reply", "schema": schema } });
+    }
+    out
+}
+
+fn to_openai_message(m: &Value) -> Value {
+    let content = m["content"].as_str().unwrap_or("");
+    match m["role"].as_str() {
+        Some("tool") => json!({ "role": "tool", "tool_call_id": m["tool_call_id"], "content": content }),
+        Some("assistant") if m["tool_calls"].is_array() => json!({
+            "role": "assistant",
+            "content": content,
+            "tool_calls": m["tool_calls"].as_array().into_iter().flatten().map(|c| json!({
+                "id": c["id"], "type": "function",
+                // OpenAI는 인자를 JSON 문자열로 주고받는다
+                "function": { "name": c["function"]["name"], "arguments": c["function"]["arguments"].to_string() },
+            })).collect::<Vec<_>>(),
+        }),
+        _ => match m["images"].as_array() {
+            Some(images) if !images.is_empty() => {
+                let mut parts = vec![json!({ "type": "text", "text": content })];
+                parts.extend(images.iter().filter_map(Value::as_str).map(|b64| json!({ "type": "image_url", "image_url": { "url": format!("data:image/jpeg;base64,{b64}") } })));
+                json!({ "role": m["role"], "content": parts })
+            }
+            _ => json!({ "role": m["role"], "content": content }),
+        },
+    }
+}
+
+// OpenAI 스트림(SSE: "data: {...}" 줄, 끝은 "data: [DONE]") — 도구 호출은 조각(index별 id/이름/인자 문자열)으로 와서
+// 모았다가 끝에 Ollama 형식({id, function: {name, arguments: 객체}})으로 돌려준다
+fn read_openai_stream(
+    lines: impl Iterator<Item = Result<String, String>>,
+    send: &dyn Fn(Value) -> Result<(), String>,
+) -> Result<(String, Vec<Value>), String> {
+    let mut content = String::new();
+    let mut calls: Vec<(String, String, String)> = Vec::new(); // (id, name, arguments)
+    for line in lines {
+        if STOP.load(Ordering::Relaxed) {
+            break;
+        }
+        let line = line?;
+        let Some(data) = line.strip_prefix("data:").map(str::trim) else { continue };
+        if data == "[DONE]" {
+            break;
+        }
+        let v: Value = serde_json::from_str(data).map_err(|e| e.to_string())?;
+        if let Some(err) = v["error"]["message"].as_str().or(v["error"].as_str()) {
+            return Err(err.to_string());
+        }
+        let delta = &v["choices"][0]["delta"];
+        if let Some(s) = delta["content"].as_str().filter(|s| !s.is_empty()) {
+            content += s;
+            send(json!({ "delta": s }))?;
+        }
+        for c in delta["tool_calls"].as_array().into_iter().flatten() {
+            let i = c["index"].as_u64().unwrap_or(calls.len() as u64) as usize;
+            if calls.len() <= i {
+                calls.resize(i + 1, Default::default());
+            }
+            let call = &mut calls[i];
+            if let Some(id) = c["id"].as_str() {
+                call.0 = id.to_string();
+            }
+            call.1 += c["function"]["name"].as_str().unwrap_or("");
+            call.2 += c["function"]["arguments"].as_str().unwrap_or("");
+        }
+    }
+    let calls = calls
+        .into_iter()
+        .filter(|c| !c.1.is_empty())
+        .map(|(id, name, args)| json!({ "id": id, "function": { "name": name, "arguments": serde_json::from_str::<Value>(&args).unwrap_or(json!({})) } }))
+        .collect();
     Ok((content, calls))
 }
 
@@ -406,9 +546,14 @@ fn read_pages(model: &str, question: &str, label: &str, spec: &str, send: &dyn F
     )))
 }
 
-// Ollama가 모델 정보에 밝히는 기능 목록으로 판단 — 못 알아내면(옛 Ollama 등) 도구 없이
+// Ollama가 모델 정보에 밝히는 기능 목록으로 판단 — 못 알아내면(옛 Ollama 등) 도구 없이.
+// OpenAI 호환은 이런 API가 없어 일단 쓴다고 보고, 거절하면 ai_chat이 도구 없이 다시 보낸다
 fn supports_tools(model: &str) -> bool {
-    ureq::post(&format!("{}/api/show", base_url()))
+    let s = current();
+    if s.openai() {
+        return true;
+    }
+    s.post("/api/show")
         .send_json(json!({ "model": model }))
         .ok()
         .and_then(|r| r.into_json::<Value>().ok())
@@ -611,8 +756,48 @@ mod tests {
 
     #[test]
     fn host_setting_overrides_env_and_gets_a_scheme() {
-        assert_eq!(base_url_for(Some("192.168.0.5:11434/")), "http://192.168.0.5:11434");
-        assert_eq!(base_url_for(Some("http://gpu-box:11434")), "http://gpu-box:11434");
+        let s = |provider: &str, host: &str| Server { provider: provider.into(), host: host.into(), key: String::new() }.base_url();
+        assert_eq!(s("ollama", "192.168.0.5:11434/"), "http://192.168.0.5:11434");
+        assert_eq!(s("ollama", "http://gpu-box:11434"), "http://gpu-box:11434");
+        assert_eq!(s("openai", ""), "http://127.0.0.1:1234"); // LM Studio 기본
+        assert_eq!(s("openai", "http://localhost:8080/v1/"), "http://localhost:8080"); // .../v1까지 적어도
+    }
+
+    #[test]
+    fn openai_requests_carry_images_tool_calls_and_json_schema() {
+        let body = json!({
+            "model": "m", "stream": true, "options": { "num_ctx": 16384 }, "format": { "type": "object" },
+            "messages": [
+                { "role": "user", "content": "q", "images": ["QUJD"] },
+                { "role": "assistant", "content": "", "tool_calls": [{ "id": "c1", "function": { "name": "search_text", "arguments": { "query": "x" } } }] },
+                { "role": "tool", "tool_name": "search_text", "tool_call_id": "c1", "content": "hits" },
+            ],
+        });
+        let out = to_openai_body(&body);
+        assert!(out.get("options").is_none());
+        assert_eq!(out["response_format"]["json_schema"]["schema"]["type"], "object");
+        assert_eq!(out["messages"][0]["content"][1]["image_url"]["url"], "data:image/jpeg;base64,QUJD");
+        assert_eq!(out["messages"][1]["tool_calls"][0]["function"]["arguments"], "{\"query\":\"x\"}");
+        assert_eq!(out["messages"][2], json!({ "role": "tool", "tool_call_id": "c1", "content": "hits" }));
+    }
+
+    #[test]
+    fn openai_stream_collects_text_and_split_tool_calls() {
+        let lines = [
+            r#"data: {"choices":[{"delta":{"content":"찾아"}}]}"#,
+            "",
+            r#"data: {"choices":[{"delta":{"content":"볼게요"}}]}"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"search_text","arguments":""}}]}}]}"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"{\"query\":"}}]}}]}"#,
+            r#"data: {"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"vcenter\"}"}}]}}]}"#,
+            "data: [DONE]",
+        ];
+        let sent = std::cell::RefCell::new(String::new());
+        let send = |v: Value| { sent.borrow_mut().push_str(v["delta"].as_str().unwrap_or("")); Ok(()) };
+        let (content, calls) = read_openai_stream(lines.iter().map(|l| Ok(l.to_string())), &send).unwrap();
+        assert_eq!(content, "찾아볼게요");
+        assert_eq!(*sent.borrow(), "찾아볼게요");
+        assert_eq!(calls, vec![json!({ "id": "call_1", "function": { "name": "search_text", "arguments": { "query": "vcenter" } } })]);
     }
 
     #[test]

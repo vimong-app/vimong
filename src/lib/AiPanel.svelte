@@ -11,6 +11,8 @@
   const MODEL_KEY = 'vimong-ai-model';
   const CONTEXT_KEY = 'vimong-ai-context';
   const HOST_KEY = 'vimong-ai-host';
+  const PROVIDER_KEY = 'vimong-ai-provider'; // 'ollama' | 'openai'(OpenAI 호환: LM Studio, llama.cpp 등) — Rust ai.rs Server
+  const API_KEY_KEY = 'vimong-ai-key';
   function load(key) { try { return localStorage.getItem(key); } catch (_) { return null; } }
   function save(key, v) { try { localStorage.setItem(key, v); } catch (_) { /* skip */ } }
 
@@ -22,39 +24,43 @@
   const savedContext = load(CONTEXT_KEY);
   export const aiState = $state({ chats: {}, busy: false, error: '', models: null, model: load(MODEL_KEY) ?? '', context: ['page', 'doc', 'image'].includes(savedContext) ? savedContext : 'page' });
   const ai = aiState;
-  // 첫 Ollama 호출보다 주소가 먼저 Rust에 들어가 있어야 한다 — 목록/질문은 이걸 기다린 뒤 부른다
-  const hostReady = invoke('ai_set_host', { host: load(HOST_KEY) ?? '' }).catch(() => {});
+  // 첫 서버 호출보다 서버 설정이 먼저 Rust에 들어가 있어야 한다 — 목록/질문은 이걸 기다린 뒤 부른다
+  const savedServer = () => ({ provider: load(PROVIDER_KEY) || 'ollama', host: load(HOST_KEY) ?? '', key: load(API_KEY_KEY) ?? '' });
+  const hostReady = invoke('ai_set_server', { server: savedServer() }).catch(() => {});
 
   export function aiSettings() {
-    return { host: load(HOST_KEY) ?? '', model: load(MODEL_KEY) ?? ai.model, context: load(CONTEXT_KEY) ?? 'page' };
+    return { ...savedServer(), model: load(MODEL_KEY) ?? ai.model, context: load(CONTEXT_KEY) ?? 'page' };
   }
 
   // 설정 창의 "적용" — 지금 패널도 기본값으로 되돌린다
-  export async function applyAiSettings({ host, model, context }) {
-    save(HOST_KEY, host.trim());
-    await invoke('ai_set_host', { host: host.trim() });
+  export async function applyAiSettings({ provider, host, key, model, context }) {
+    const server = { provider, host: host.trim(), key: key.trim() };
+    save(PROVIDER_KEY, server.provider);
+    save(HOST_KEY, server.host);
+    save(API_KEY_KEY, server.key);
+    await invoke('ai_set_server', { server });
     if (model) { save(MODEL_KEY, model); ai.model = model; }
     save(CONTEXT_KEY, context);
     ai.context = context;
     await loadModels();
   }
 
-  // 모델 받기/업데이트 — onProgress({ status, completed, total }). 끝나면 목록을 새로 받는다
-  export async function pullModel(name, host, onProgress) {
+  // 모델 받기/업데이트(Ollama만) — onProgress({ status, completed, total }). 끝나면 목록을 새로 받는다
+  export async function pullModel(name, server, onProgress) {
     const onEvent = new Channel();
     onEvent.onmessage = onProgress;
-    await invoke('ai_pull', { model: name, host: host || null, onEvent });
-    await loadModels(host);
+    await invoke('ai_pull', { model: name, server, onEvent });
+    await loadModels(server);
   }
   const NO_CHAT = { messages: [], error: '' };
   // 보낸 질문 기록 — 문서와 상관없이 하나(같은 질문을 다른 문서에 다시 묻는 일이 많다)
   const promptHistory = createHistory('vimong-ai-prompt-history', 50);
 
-  // host: 설정 창에서 적용 전 주소로 목록을 볼 때(없으면 적용된 주소)
-  export async function loadModels(host = null) {
+  // server: 설정 창에서 적용 전 서버로 목록을 볼 때 { provider, host, key } (없으면 적용된 서버)
+  export async function loadModels(server = null) {
     await hostReady;
     try {
-      ai.models = await invoke('ai_models', { host: host || null });
+      ai.models = await invoke('ai_models', { server });
       ai.error = '';
       if (!ai.models.includes(ai.model)) ai.model = ai.models[0] ?? '';
     } catch (e) {

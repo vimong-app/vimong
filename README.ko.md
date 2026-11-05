@@ -67,6 +67,8 @@ ollama pull qwen3:8b       # 텍스트 질문용
 ollama pull qwen2.5vl:7b   # 그림·스캔 페이지용 (비전)
 ```
 
+LM Studio, llama.cpp의 `llama-server`, MLX-LM, Jan 등 OpenAI 호환 서버도 쓸 수 있습니다 — 설정 → AI에서 **서버 종류**를 **OpenAI 호환**으로 바꾸세요.
+
 자세한 내용은 [AI 연동 페이지](https://vimong.app/ko/features/mcp.html)를 보세요.
 
 ### 다른 AI 앱에서 (MCP)

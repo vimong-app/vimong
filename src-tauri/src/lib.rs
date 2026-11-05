@@ -5778,7 +5778,7 @@ pub fn run() {
             ai::ai_models,
             ai::ai_chat,
             ai::ai_stop,
-            ai::ai_set_host,
+            ai::ai_set_server,
             ai::ai_pull,
             ai::ai_save_markdown,
             read_file_bytes,

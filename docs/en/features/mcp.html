@@ -86,6 +86,7 @@ ollama serve            # not needed if you use the Ollama app
 ollama pull qwen3:8b    # questions about text
 ollama pull qwen2.5vl:7b  # figures and scanned pages (vision)</pre>
       <p class="mt-3 text-neutral-400">Choose the model from the menu in the panel; it lasts until you quit. In <strong class="text-white">Settings → AI</strong> you set the default model and what to send by default, update installed models, download new ones, and point Vimong at Ollama on another computer. On a Mac with 16 GB of memory, models of 7–14B parameters (5–9 GB) run comfortably; for vision, <span class="kbd">gemma3:12b</span> and <span class="kbd">llama3.2-vision:11b</span> also work.</p>
+      <p class="mt-3 text-neutral-400">Prefer another local AI app? Set <strong class="text-white">Server</strong> to <strong class="text-white">OpenAI-compatible</strong> in Settings → AI to use <a href="https://lmstudio.ai" class="text-white hover:underline">LM Studio</a> (fast on Apple Silicon with MLX), llama.cpp's <span class="kbd">llama-server</span>, MLX-LM, Jan and other servers that speak the OpenAI API. Start the app's local server and load a model there, and give it a context length of 16k or more. Downloading and updating models then happens in that app.</p>
       <p class="mt-3 text-neutral-400">Vimong connects to Ollama at <span class="kbd">127.0.0.1:11434</span> unless you set another address in Settings → AI (or <span class="kbd">OLLAMA_HOST</span>). Only http addresses are supported.</p>
     </section>
     <section class="mt-8">
