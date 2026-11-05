@@ -60,7 +60,7 @@ Or download the `.dmg` from [Releases](https://github.com/vimong-app/vimong/rele
 
 ### In Vimong (local AI)
 
-Press `a` (or `:ai {question}`) to open the AI tab in the sidebar and ask about the page you're reading. Answers come from a model running locally through [Ollama](https://ollama.com), so nothing leaves your computer. Pick what goes along with each question — this page's text, the whole file's text, or the page text plus an image of the page for vision models; selected text is always included.
+Press `a` (or `:ai {question}`) to open the AI tab in the sidebar and ask about the page you're reading. Answers come from a model running locally through [Ollama](https://ollama.com), so nothing leaves your computer. Pick what goes along with each question — this page's text, the whole file's text, or the page text plus an image of the page for vision models; selected text is always included. To ask about a specific part, right-click entries in the outline or pages in the thumbnails and choose **Ask AI...** — every question then reads that whole part. Save a reply as a Markdown file with its **Save** button or `:ai save`; page images it was given are saved next to it.
 
 ```bash
 brew install ollama
@@ -156,7 +156,10 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `r` / `R` | Rotate the page 90° clockwise / counterclockwise |
 | `p` | Presentation mode (fullscreen slideshow) |
 | `gi` / `:set invert` | Toggle page dark mode (invert page colors) |
-| `o` / Menu key / `Shift+F10` (TOC focused) | Open the TOC entry menu (export, search in selection) |
+| `o` / Menu key / `Shift+F10` (TOC focused) | Open the TOC entry menu (export, search in selection, ask AI) |
+| `[` / `]` | Previous / next sidebar tab |
+| `Cmd+1` – `Cmd+5` | Go to the thumbnails, outline, search, notes or AI tab |
+| `Option+1` – `Option+4` | Switch tool: pointer, select text, highlight, note |
 
 ### Zoom
 
@@ -187,6 +190,8 @@ Motion and zoom keys take a count like in Vim: `5j`, `3J`, `2Ctrl+D`, `3n`, `3zi
 | `g*` / `g#` | Same, but also match inside words (`cat` → `category`) |
 | `/` then `Ctrl+R` `Ctrl+W` / `Ctrl+R` `Ctrl+A` | Insert the word under the cursor (or the selected text) into the search; `Ctrl+A` takes the whole non-blank chunk, e.g. `\emergencystretch` |
 | `:nohlsearch` / `:noh` | Clear search highlighting |
+| `a` / `:ai [question]` | Open the AI tab, asking right away if a question is given |
+| `:ai save` | Save the last AI reply as a Markdown file |
 
 ### Tabs
 
